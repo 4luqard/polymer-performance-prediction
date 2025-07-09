@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+import subprocess
+import shutil
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -77,4 +79,32 @@ def test_ridge_baseline_ignores_non_numeric_columns(tmp_path):
     )
     expected = 3 * test_df["feature1"]
     np.testing.assert_allclose(preds["target"], expected, rtol=1e-5)
+
+
+def test_cli_defaults_use_kaggle_paths():
+    """When run without arguments, CLI reads from Kaggle paths."""
+    root_input = Path("/kaggle/input/neurips-open-polymer-prediction-2025")
+    root_work = Path("/kaggle/working")
+    try:
+        root_input.mkdir(parents=True, exist_ok=True)
+        root_work.mkdir(parents=True, exist_ok=True)
+
+        train_df = pd.DataFrame({"id": [1, 2], "feature1": [1.0, 2.0]})
+        train_df["target"] = 2 * train_df["feature1"]
+        test_df = pd.DataFrame({"id": [3], "feature1": [3.0]})
+
+        (root_input / "train.csv").write_text(train_df.to_csv(index=False))
+        (root_input / "test.csv").write_text(test_df.to_csv(index=False))
+
+        subprocess.run(
+            [sys.executable, str(Path(__file__).resolve().parents[1] / "baseline.py"), "--alpha", "0.0"],
+            check=True,
+        )
+
+        preds = pd.read_csv(root_work / "submission.csv")
+        expected = 2 * test_df["feature1"]
+        np.testing.assert_allclose(preds["target"], expected, rtol=1e-5)
+    finally:
+        if Path("/kaggle").exists():
+            shutil.rmtree("/kaggle")
 
