@@ -8,9 +8,11 @@ creates a submission file.
 ## Usage
 
 ```bash
-python baseline.py --train path/to/train.csv --test path/to/test.csv --output submission.csv
+python baseline.py
 ```
 
-By default it expects `id` and `target` columns. The predictions will be written to
-`submission.csv` in the required Kaggle format.
+When executed inside Kaggle, the script automatically reads the competition
+data from `/kaggle/input/neurips-open-polymer-prediction-2025/` and writes the
+submission file to `/kaggle/working/submission.csv`. If you want to supply
+custom paths, use the `--train`, `--test` and `--output` options.
 
