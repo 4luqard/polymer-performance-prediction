@@ -1,6 +1,11 @@
 import argparse
 from pathlib import Path
 
+# Default paths for running inside Kaggle
+DEFAULT_TRAIN_PATH = "/kaggle/input/neurips-open-polymer-prediction-2025/train.csv"
+DEFAULT_TEST_PATH = "/kaggle/input/neurips-open-polymer-prediction-2025/test.csv"
+DEFAULT_OUTPUT_PATH = "/kaggle/working/submission.csv"
+
 import pandas as pd
 from sklearn.linear_model import Ridge
 
@@ -37,9 +42,9 @@ def train_ridge_and_predict(train_path: str,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Baseline for Open Polymer Prediction 2025")
-    parser.add_argument("--train", required=True, help="Path to training CSV")
-    parser.add_argument("--test", required=True, help="Path to test CSV")
-    parser.add_argument("--output", default="submission.csv", help="Where to write predictions")
+    parser.add_argument("--train", default=DEFAULT_TRAIN_PATH, help="Path to training CSV")
+    parser.add_argument("--test", default=DEFAULT_TEST_PATH, help="Path to test CSV")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH, help="Where to write predictions")
     parser.add_argument("--target", default="target", help="Name of target column")
     parser.add_argument("--id", dest="id_column", default="id", help="Name of ID column")
     parser.add_argument("--alpha", type=float, default=1.0, help="Ridge regularization strength")
