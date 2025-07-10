@@ -10,22 +10,44 @@ from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
+from sklearn.model_selection import KFold, cross_val_score
+from sklearn.metrics import mean_squared_error, r2_score
 import re
+import sys
 import warnings
 warnings.filterwarnings('ignore')
 
-# Kaggle competition paths
-TRAIN_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/train.csv'
-TEST_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/test.csv'
-SUBMISSION_PATH = '/kaggle/working/submission.csv'
+# Check if running on Kaggle or locally
+import os
+IS_KAGGLE = os.path.exists('/kaggle/input')
 
-# Supplementary dataset paths
-SUPP_PATHS = [
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv',
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv',
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv',
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv'
-]
+# Set paths based on environment
+if IS_KAGGLE:
+    # Kaggle competition paths
+    TRAIN_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/train.csv'
+    TEST_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/test.csv'
+    SUBMISSION_PATH = '/kaggle/working/submission.csv'
+    
+    # Supplementary dataset paths
+    SUPP_PATHS = [
+        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv',
+        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv',
+        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv',
+        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv'
+    ]
+else:
+    # Local paths
+    TRAIN_PATH = 'data/raw/train.csv'
+    TEST_PATH = 'data/raw/test.csv'
+    SUBMISSION_PATH = 'output/submission.csv'
+    
+    # Supplementary dataset paths
+    SUPP_PATHS = [
+        'data/raw/train_supplement/dataset1.csv',
+        'data/raw/train_supplement/dataset2.csv',
+        'data/raw/train_supplement/dataset3.csv',
+        'data/raw/train_supplement/dataset4.csv'
+    ]
 
 def extract_molecular_features(smiles):
     """Extract features from SMILES string without external libraries"""
@@ -130,7 +152,63 @@ def prepare_features(df):
     features_df = pd.DataFrame(features_list)
     return features_df
 
-def main():
+def perform_cross_validation(X, y, model, cv_folds=5):
+    """Perform cross-validation and return scores for each target"""
+    print(f"\nPerforming {cv_folds}-fold cross-validation...")
+    
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv_scores = {}
+    
+    # Get target column names
+    if isinstance(y, pd.DataFrame):
+        target_names = y.columns
+    else:
+        target_names = [f'Target_{i}' for i in range(y.shape[1])]
+    
+    # Perform CV for each target separately to get individual scores
+    for i, target_name in enumerate(target_names):
+        scores = []
+        
+        for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
+            # Split data
+            X_fold_train, X_fold_val = X[train_idx], X[val_idx]
+            y_fold_train, y_fold_val = y.iloc[train_idx, i], y.iloc[val_idx, i]
+            
+            # Skip if all values are NaN
+            if y_fold_train.isna().all() or y_fold_val.isna().all():
+                continue
+            
+            # Train model for this target
+            single_model = Ridge(alpha=1.0, random_state=42)
+            single_model.fit(X_fold_train, y_fold_train)
+            
+            # Predict and calculate RMSE
+            y_pred = single_model.predict(X_fold_val)
+            rmse = np.sqrt(mean_squared_error(y_fold_val, y_pred))
+            scores.append(rmse)
+        
+        if scores:
+            cv_scores[target_name] = {
+                'mean_rmse': np.mean(scores),
+                'std_rmse': np.std(scores),
+                'all_scores': scores
+            }
+        else:
+            cv_scores[target_name] = {
+                'mean_rmse': np.nan,
+                'std_rmse': np.nan,
+                'all_scores': []
+            }
+    
+    return cv_scores
+
+def main(cv_only=False):
+    """
+    Main function to train model and make predictions
+    
+    Args:
+        cv_only: If True, only run cross-validation without making predictions
+    """
     print("=== Baseline Ridge Regression Model ===")
     print("Loading training data...")
     
@@ -197,8 +275,31 @@ def main():
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Train Ridge regression model
-    print("\nTraining Ridge regression model...")
+    # Perform cross-validation for quick feedback
+    print("\n=== Cross-Validation Results ===")
+    cv_scores = perform_cross_validation(X_train_scaled, y_train_filled, 
+                                       Ridge(alpha=1.0, random_state=42), cv_folds=5)
+    
+    print("\nCross-validation RMSE scores:")
+    overall_rmse = []
+    for target, scores in cv_scores.items():
+        if not np.isnan(scores['mean_rmse']):
+            print(f"{target}: {scores['mean_rmse']:.4f} (+/- {scores['std_rmse']:.4f})")
+            overall_rmse.append(scores['mean_rmse'])
+        else:
+            print(f"{target}: No valid scores (all values missing)")
+    
+    if overall_rmse:
+        print(f"\nOverall mean RMSE: {np.mean(overall_rmse):.4f}")
+    
+    # If cv_only mode, stop here
+    if cv_only:
+        print("\n=== Cross-validation complete (cv_only mode) ===")
+        return
+    
+    # Train Ridge regression model on full data
+    print("\n=== Training on Full Dataset ===")
+    print("Training Ridge regression model...")
     model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
     model.fit(X_train_scaled, y_train_filled)
     
@@ -238,4 +339,9 @@ def main():
     print("\n=== Model training complete! ===")
 
 if __name__ == "__main__":
-    main()
+    # Check for command-line arguments
+    if len(sys.argv) > 1 and sys.argv[1] == '--cv-only':
+        print("Running in cross-validation only mode...")
+        main(cv_only=True)
+    else:
+        main(cv_only=False)
