@@ -378,7 +378,15 @@ def main():
     )
     
     # Display results
-    display_metric_results(cv_results['mean_score'], cv_results['individual_targets'])
+    print(f"\n=== Final Results ===")
+    print(f"Overall Competition Metric (wMAE): {cv_results['mean_score']:.4f} (+/- {cv_results['std_score']:.4f})")
+    
+    print("\nIndividual Target Scores (scaled MAE):")
+    for target, scores in cv_results['individual_targets'].items():
+        if not np.isnan(scores['mean']):
+            print(f"  {target}: {scores['mean']:.4f} (+/- {scores['std']:.4f})")
+        else:
+            print(f"  {target}: No data")
     
     print(f"\nFold scores: {cv_results['all_scores']}")
     print(f"Mean: {cv_results['mean_score']:.4f}")
