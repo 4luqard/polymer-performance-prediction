@@ -11,6 +11,11 @@ The goal is to predict five polymer properties from SMILES molecular representat
 - **Density**: Material density
 - **Rg**: Radius of gyration
 
+The competition uses a weighted Mean Absolute Error (wMAE) metric that:
+- Normalizes each property's error by its min-max range
+- Weights properties by the inverse square root of valid samples
+- Handles missing values marked as -9999
+
 ## Project Structure
 
 ```
@@ -44,12 +49,8 @@ The baseline model (`model.py`) uses:
 - Derived features (flexibility score, heteroatom ratio, etc.)
 
 ### Baseline Performance (5-fold CV):
-- **Tg**: 20.26 (+/- 1.36) RMSE
-- **FFV**: 0.018 (+/- 0.002) RMSE
-- **Tc**: 0.018 (+/- 0.001) RMSE
-- **Density**: 0.028 (+/- 0.004) RMSE
-- **Rg**: 0.90 (+/- 0.09) RMSE
-- **Overall mean**: 4.25 RMSE
+- **Competition Metric (wMAE)**: TBD (run model.py to calculate)
+- Individual property scores shown during cross-validation
 
 ## Usage
 
