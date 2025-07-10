@@ -30,9 +30,10 @@ neurips-open-polymer-prediction-2025/
 ## Model Description
 
 The baseline model (`model.py`) uses:
-- **Feature Engineering**: Extracts 47+ molecular features from SMILES strings without external dependencies
+- **Feature Engineering**: Extracts 45+ molecular features from SMILES strings without external dependencies
 - **Algorithm**: Ridge regression with multi-output wrapper
 - **Data**: Combines main training data with 4 supplementary datasets (~17k samples total)
+- **Validation**: 5-fold cross-validation for quick performance feedback
 
 ### Key Features Extracted:
 - Atom counts (C, O, N, S, F, Cl, Br, etc.)
@@ -41,6 +42,14 @@ The baseline model (`model.py`) uses:
 - Functional groups (carbonyl, hydroxyl, ether, amine, etc.)
 - Polymer-specific features (polymer ends, chain length estimates)
 - Derived features (flexibility score, heteroatom ratio, etc.)
+
+### Baseline Performance (5-fold CV):
+- **Tg**: 20.26 (+/- 1.36) RMSE
+- **FFV**: 0.018 (+/- 0.002) RMSE
+- **Tc**: 0.018 (+/- 0.001) RMSE
+- **Density**: 0.028 (+/- 0.004) RMSE
+- **Rg**: 0.90 (+/- 0.09) RMSE
+- **Overall mean**: 4.25 RMSE
 
 ## Usage
 
@@ -56,9 +65,10 @@ The `model.py` script is designed to run directly in a Kaggle notebook without a
 The script will:
 1. Load all training data (including supplementary datasets)
 2. Extract molecular features from SMILES
-3. Train a Ridge regression model
-4. Generate predictions for test set
-5. Save submission to `/kaggle/working/submission.csv`
+3. Perform 5-fold cross-validation for baseline performance
+4. Train a Ridge regression model on full dataset
+5. Generate predictions for test set
+6. Save submission to `/kaggle/working/submission.csv`
 
 ### Local Development
 
@@ -68,11 +78,14 @@ For local testing and development:
 # Install dependencies
 pip install pandas numpy scikit-learn
 
+# Run cross-validation only (quick feedback)
+python model.py --cv-only
+
+# Run full model training and prediction
+python model.py
+
 # Run tests
 python test/test_model.py
-
-# Run model locally (modify paths in the script first)
-python model.py
 ```
 
 ## Data
@@ -90,6 +103,7 @@ The competition provides:
 
 Run the test suite to validate:
 - Feature extraction functionality
+- Cross-validation functionality
 - Model training pipeline
 - Submission format compliance
 
