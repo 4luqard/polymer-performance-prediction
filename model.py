@@ -10,7 +10,7 @@ from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import KFold, cross_val_score
+from sklearn.model_selection import cross_val_score
 from sklearn.metrics import mean_squared_error, r2_score
 import re
 import sys
@@ -190,71 +190,10 @@ def prepare_features(df):
     features_df = pd.DataFrame(features_list)
     return features_df
 
-def perform_cross_validation(X, y, model, cv_folds=5):
-    """Perform cross-validation using the competition metric"""
-    print(f"\nPerforming {cv_folds}-fold cross-validation...")
-    
-    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    cv_scores = []
-    cv_individual_scores = {col: [] for col in y.columns}
-    
-    # Get target column names
-    if isinstance(y, pd.DataFrame):
-        target_names = y.columns.tolist()
-    else:
-        target_names = [f'Target_{i}' for i in range(y.shape[1])]
-    
-    # Perform CV with multi-output model
-    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
-        # Split data
-        X_fold_train, X_fold_val = X[train_idx], X[val_idx]
-        y_fold_train, y_fold_val = y.iloc[train_idx], y.iloc[val_idx]
-        
-        # Train multi-output model
-        fold_model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
-        fold_model.fit(X_fold_train, y_fold_train.fillna(y_fold_train.median()))
-        
-        # Predict
-        y_pred = fold_model.predict(X_fold_val)
-        y_pred_df = pd.DataFrame(y_pred, columns=target_names, index=val_idx)
-        
-        # Calculate competition metric
-        score, individual = neurips_polymer_metric(y_fold_val, y_pred_df, target_names)
-        
-        if not np.isnan(score):
-            cv_scores.append(score)
-            for target in target_names:
-                if target in individual and not np.isnan(individual[target]):
-                    cv_individual_scores[target].append(individual[target])
-    
-    # Calculate summary statistics
-    results = {
-        'mean_score': np.mean(cv_scores) if cv_scores else np.nan,
-        'std_score': np.std(cv_scores) if cv_scores else np.nan,
-        'all_scores': cv_scores,
-        'individual_targets': {}
-    }
-    
-    for target in target_names:
-        if cv_individual_scores[target]:
-            results['individual_targets'][target] = {
-                'mean': np.mean(cv_individual_scores[target]),
-                'std': np.std(cv_individual_scores[target])
-            }
-        else:
-            results['individual_targets'][target] = {
-                'mean': np.nan,
-                'std': np.nan
-            }
-    
-    return results
 
-def main(cv_only=False):
+def main():
     """
     Main function to train model and make predictions
-    
-    Args:
-        cv_only: If True, only run cross-validation without making predictions
     """
     print("=== Baseline Ridge Regression Model ===")
     print("Loading training data...")
@@ -322,25 +261,6 @@ def main(cv_only=False):
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Perform cross-validation for quick feedback
-    print("\n=== Cross-Validation Results ===")
-    cv_results = perform_cross_validation(X_train_scaled, y_train_filled, 
-                                        Ridge(alpha=1.0, random_state=42), cv_folds=5)
-    
-    print(f"\nCompetition Metric (CV): {cv_results['mean_score']:.4f} (+/- {cv_results['std_score']:.4f})")
-    
-    print("\nIndividual Target Scores (normalized):")
-    for target, scores in cv_results['individual_targets'].items():
-        if not np.isnan(scores['mean']):
-            print(f"  {target}: {scores['mean']:.4f} (+/- {scores['std']:.4f})")
-        else:
-            print(f"  {target}: No valid scores")
-    
-    # If cv_only mode, stop here
-    if cv_only:
-        print("\n=== Cross-validation complete (cv_only mode) ===")
-        return
-    
     # Train Ridge regression model on full data
     print("\n=== Training on Full Dataset ===")
     print("Training Ridge regression model...")
@@ -383,9 +303,4 @@ def main(cv_only=False):
     print("\n=== Model training complete! ===")
 
 if __name__ == "__main__":
-    # Check for command-line arguments
-    if len(sys.argv) > 1 and sys.argv[1] == '--cv-only':
-        print("Running in cross-validation only mode...")
-        main(cv_only=True)
-    else:
-        main(cv_only=False)
+    main()
