@@ -14,8 +14,46 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.metrics import mean_squared_error, r2_score
 import re
 import sys
+import os
 import warnings
 warnings.filterwarnings('ignore')
+
+# Import competition metric
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from src.competition_metric import neurips_polymer_metric, display_metric_results
+except ImportError:
+    # Fallback if running as script
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    try:
+        from src.competition_metric import neurips_polymer_metric, display_metric_results
+    except ImportError:
+        # If still can't import, define a simple fallback
+        def neurips_polymer_metric(y_true, y_pred, target_names=None):
+            """Fallback metric if import fails"""
+            from sklearn.metrics import mean_squared_error
+            if target_names is None:
+                target_names = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+            
+            scores = {}
+            total = 0
+            count = 0
+            
+            for i, target in enumerate(target_names):
+                mask = ~np.isnan(y_true[:, i])
+                if np.sum(mask) > 0:
+                    rmse = np.sqrt(mean_squared_error(y_true[mask, i], y_pred[mask, i]))
+                    scores[target] = rmse
+                    total += rmse
+                    count += 1
+            
+            return total / count if count > 0 else 0, scores
+        
+        def display_metric_results(score, individual, name="Metric"):
+            print(f"\n{name}: {score:.4f}")
+            for k, v in individual.items():
+                if not np.isnan(v):
+                    print(f"  {k}: {v:.4f}")
 
 # Check if running on Kaggle or locally
 import os
@@ -153,54 +191,63 @@ def prepare_features(df):
     return features_df
 
 def perform_cross_validation(X, y, model, cv_folds=5):
-    """Perform cross-validation and return scores for each target"""
+    """Perform cross-validation using the competition metric"""
     print(f"\nPerforming {cv_folds}-fold cross-validation...")
     
     kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    cv_scores = {}
+    cv_scores = []
+    cv_individual_scores = {col: [] for col in y.columns}
     
     # Get target column names
     if isinstance(y, pd.DataFrame):
-        target_names = y.columns
+        target_names = y.columns.tolist()
     else:
         target_names = [f'Target_{i}' for i in range(y.shape[1])]
     
-    # Perform CV for each target separately to get individual scores
-    for i, target_name in enumerate(target_names):
-        scores = []
+    # Perform CV with multi-output model
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
+        # Split data
+        X_fold_train, X_fold_val = X[train_idx], X[val_idx]
+        y_fold_train, y_fold_val = y.iloc[train_idx], y.iloc[val_idx]
         
-        for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
-            # Split data
-            X_fold_train, X_fold_val = X[train_idx], X[val_idx]
-            y_fold_train, y_fold_val = y.iloc[train_idx, i], y.iloc[val_idx, i]
-            
-            # Skip if all values are NaN
-            if y_fold_train.isna().all() or y_fold_val.isna().all():
-                continue
-            
-            # Train model for this target
-            single_model = Ridge(alpha=1.0, random_state=42)
-            single_model.fit(X_fold_train, y_fold_train)
-            
-            # Predict and calculate RMSE
-            y_pred = single_model.predict(X_fold_val)
-            rmse = np.sqrt(mean_squared_error(y_fold_val, y_pred))
-            scores.append(rmse)
+        # Train multi-output model
+        fold_model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
+        fold_model.fit(X_fold_train, y_fold_train.fillna(y_fold_train.median()))
         
-        if scores:
-            cv_scores[target_name] = {
-                'mean_rmse': np.mean(scores),
-                'std_rmse': np.std(scores),
-                'all_scores': scores
+        # Predict
+        y_pred = fold_model.predict(X_fold_val)
+        y_pred_df = pd.DataFrame(y_pred, columns=target_names, index=val_idx)
+        
+        # Calculate competition metric
+        score, individual = neurips_polymer_metric(y_fold_val, y_pred_df, target_names)
+        
+        if not np.isnan(score):
+            cv_scores.append(score)
+            for target in target_names:
+                if target in individual and not np.isnan(individual[target]):
+                    cv_individual_scores[target].append(individual[target])
+    
+    # Calculate summary statistics
+    results = {
+        'mean_score': np.mean(cv_scores) if cv_scores else np.nan,
+        'std_score': np.std(cv_scores) if cv_scores else np.nan,
+        'all_scores': cv_scores,
+        'individual_targets': {}
+    }
+    
+    for target in target_names:
+        if cv_individual_scores[target]:
+            results['individual_targets'][target] = {
+                'mean': np.mean(cv_individual_scores[target]),
+                'std': np.std(cv_individual_scores[target])
             }
         else:
-            cv_scores[target_name] = {
-                'mean_rmse': np.nan,
-                'std_rmse': np.nan,
-                'all_scores': []
+            results['individual_targets'][target] = {
+                'mean': np.nan,
+                'std': np.nan
             }
     
-    return cv_scores
+    return results
 
 def main(cv_only=False):
     """
@@ -277,20 +324,17 @@ def main(cv_only=False):
     
     # Perform cross-validation for quick feedback
     print("\n=== Cross-Validation Results ===")
-    cv_scores = perform_cross_validation(X_train_scaled, y_train_filled, 
-                                       Ridge(alpha=1.0, random_state=42), cv_folds=5)
+    cv_results = perform_cross_validation(X_train_scaled, y_train_filled, 
+                                        Ridge(alpha=1.0, random_state=42), cv_folds=5)
     
-    print("\nCross-validation RMSE scores:")
-    overall_rmse = []
-    for target, scores in cv_scores.items():
-        if not np.isnan(scores['mean_rmse']):
-            print(f"{target}: {scores['mean_rmse']:.4f} (+/- {scores['std_rmse']:.4f})")
-            overall_rmse.append(scores['mean_rmse'])
+    print(f"\nCompetition Metric (CV): {cv_results['mean_score']:.4f} (+/- {cv_results['std_score']:.4f})")
+    
+    print("\nIndividual Target Scores (normalized):")
+    for target, scores in cv_results['individual_targets'].items():
+        if not np.isnan(scores['mean']):
+            print(f"  {target}: {scores['mean']:.4f} (+/- {scores['std']:.4f})")
         else:
-            print(f"{target}: No valid scores (all values missing)")
-    
-    if overall_rmse:
-        print(f"\nOverall mean RMSE: {np.mean(overall_rmse):.4f}")
+            print(f"  {target}: No valid scores")
     
     # If cv_only mode, stop here
     if cv_only:
