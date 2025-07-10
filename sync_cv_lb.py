@@ -15,7 +15,11 @@ import os
 def run_cv():
     """Run cross-validation and extract scores"""
     print("Running cross-validation...")
-    result = subprocess.run([sys.executable, "cross_validation.py"], 
+    # Get the script directory to find cross_validation.py
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cv_script = os.path.join(script_dir, "cross_validation.py")
+    
+    result = subprocess.run([sys.executable, cv_script], 
                           capture_output=True, text=True)
     
     # Parse different scores
