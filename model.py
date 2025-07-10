@@ -18,42 +18,6 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# Import competition metric
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-try:
-    from src.competition_metric import neurips_polymer_metric, display_metric_results
-except ImportError:
-    # Fallback if running as script
-    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    try:
-        from src.competition_metric import neurips_polymer_metric, display_metric_results
-    except ImportError:
-        # If still can't import, define a simple fallback
-        def neurips_polymer_metric(y_true, y_pred, target_names=None):
-            """Fallback metric if import fails"""
-            from sklearn.metrics import mean_squared_error
-            if target_names is None:
-                target_names = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
-            
-            scores = {}
-            total = 0
-            count = 0
-            
-            for i, target in enumerate(target_names):
-                mask = ~np.isnan(y_true[:, i])
-                if np.sum(mask) > 0:
-                    rmse = np.sqrt(mean_squared_error(y_true[mask, i], y_pred[mask, i]))
-                    scores[target] = rmse
-                    total += rmse
-                    count += 1
-            
-            return total / count if count > 0 else 0, scores
-        
-        def display_metric_results(score, individual, name="Metric"):
-            print(f"\n{name}: {score:.4f}")
-            for k, v in individual.items():
-                if not np.isnan(v):
-                    print(f"  {k}: {v:.4f}")
 
 # Check if running on Kaggle or locally
 import os
