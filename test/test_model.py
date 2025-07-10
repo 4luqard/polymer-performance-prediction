@@ -19,7 +19,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import functions from model.py
-from model import extract_molecular_features, prepare_features
+from model import extract_molecular_features, prepare_features, perform_cross_validation
 
 # Local paths for testing
 TRAIN_PATH = 'data/raw/train.csv'
@@ -134,6 +134,48 @@ def test_model_training():
         print(f"\n✗ Model training test failed: {e}")
         raise
 
+def test_cross_validation():
+    """Test the cross-validation functionality"""
+    print("\n" + "="*50)
+    print("Testing cross-validation...")
+    
+    try:
+        # Create small test dataset
+        np.random.seed(42)
+        n_samples = 100
+        n_features = 10
+        n_targets = 5
+        
+        # Generate random data
+        X = np.random.randn(n_samples, n_features)
+        y = pd.DataFrame(
+            np.random.randn(n_samples, n_targets),
+            columns=['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+        )
+        
+        # Add some missing values to test handling
+        y.iloc[::10, 0] = np.nan  # Add NaN to Tg
+        y.iloc[5::10, 2] = np.nan  # Add NaN to Tc
+        
+        # Perform cross-validation
+        print("Running cross-validation on synthetic data...")
+        cv_scores = perform_cross_validation(X, y, Ridge(alpha=1.0), cv_folds=3)
+        
+        # Check results
+        print("\nCross-validation results:")
+        for target, scores in cv_scores.items():
+            if not np.isnan(scores['mean_rmse']):
+                print(f"  {target}: RMSE = {scores['mean_rmse']:.4f} (+/- {scores['std_rmse']:.4f})")
+                assert len(scores['all_scores']) > 0, f"No scores for {target}"
+            else:
+                print(f"  {target}: No valid scores")
+        
+        print("\n✓ Cross-validation test passed")
+        
+    except Exception as e:
+        print(f"\n✗ Cross-validation test failed: {e}")
+        raise
+
 def test_submission_format():
     """Test that submission file has correct format"""
     print("\n" + "="*50)
@@ -176,10 +218,13 @@ def run_all_tests():
     # Test 1: Feature extraction
     test_feature_extraction()
     
-    # Test 2: Model training pipeline
+    # Test 2: Cross-validation functionality
+    test_cross_validation()
+    
+    # Test 3: Model training pipeline
     test_model_training()
     
-    # Test 3: Submission format
+    # Test 4: Submission format
     test_submission_format()
     
     print("\n" + "="*50)
