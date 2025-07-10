@@ -1,183 +1,382 @@
-#!/usr/bin/env python3
-"""
-Baseline Ridge Regression Model for NeurIPS Open Polymer Prediction 2025
-This script is designed to run directly in a Kaggle notebook without any modifications.
-"""
-
-import pandas as pd
-import numpy as np
-from sklearn.linear_model import Ridge
-from sklearn.multioutput import MultiOutputRegressor
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
-from rdkit import Chem
-from rdkit.Chem import Descriptors, Crippen, Lipinski
-import warnings
-warnings.filterwarnings('ignore')
-
-# Kaggle competition paths
-TRAIN_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/train.csv'
-TEST_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/test.csv'
-SUBMISSION_PATH = '/kaggle/working/submission.csv'
-
-# Supplementary dataset paths
-SUPP_PATHS = [
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv',
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv',
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv',
-    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv'
-]
-
-def extract_molecular_features(smiles):
-    """Extract molecular descriptors from SMILES string"""
-    features = {}
-    
-    try:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            # Return default values if SMILES parsing fails
-            return {
-                'MolWt': 0, 'LogP': 0, 'NumHDonors': 0, 'NumHAcceptors': 0,
-                'NumRotatableBonds': 0, 'NumHeteroatoms': 0, 'NumAromaticRings': 0,
-                'TPSA': 0, 'NumAtoms': 0, 'NumHeavyAtoms': 0,
-                'NumAliphaticRings': 0, 'NumSaturatedRings': 0, 'RingCount': 0,
-                'MolMR': 0, 'FractionCsp3': 0
-            }
-        
-        # Basic molecular properties
-        features['MolWt'] = Descriptors.MolWt(mol)
-        features['LogP'] = Descriptors.MolLogP(mol)
-        features['NumHDonors'] = Descriptors.NumHDonors(mol)
-        features['NumHAcceptors'] = Descriptors.NumHAcceptors(mol)
-        features['NumRotatableBonds'] = Descriptors.NumRotatableBonds(mol)
-        features['NumHeteroatoms'] = Descriptors.NumHeteroatoms(mol)
-        features['NumAromaticRings'] = Descriptors.NumAromaticRings(mol)
-        features['TPSA'] = Descriptors.TPSA(mol)
-        features['NumAtoms'] = mol.GetNumAtoms()
-        features['NumHeavyAtoms'] = mol.GetNumHeavyAtoms()
-        features['NumAliphaticRings'] = Descriptors.NumAliphaticRings(mol)
-        features['NumSaturatedRings'] = Descriptors.NumSaturatedRings(mol)
-        features['RingCount'] = Descriptors.RingCount(mol)
-        features['MolMR'] = Crippen.MolMR(mol)
-        features['FractionCsp3'] = Descriptors.FractionCsp3(mol)
-        
-    except:
-        # Return default values if any error occurs
-        features = {
-            'MolWt': 0, 'LogP': 0, 'NumHDonors': 0, 'NumHAcceptors': 0,
-            'NumRotatableBonds': 0, 'NumHeteroatoms': 0, 'NumAromaticRings': 0,
-            'TPSA': 0, 'NumAtoms': 0, 'NumHeavyAtoms': 0,
-            'NumAliphaticRings': 0, 'NumSaturatedRings': 0, 'RingCount': 0,
-            'MolMR': 0, 'FractionCsp3': 0
-        }
-    
-    return features
-
-def prepare_features(df):
-    """Convert SMILES to molecular features"""
-    print("Extracting molecular features...")
-    features_list = []
-    
-    for idx, smiles in enumerate(df['SMILES']):
-        if idx % 1000 == 0:
-            print(f"Processing molecule {idx}/{len(df)}...")
-        features = extract_molecular_features(smiles)
-        features_list.append(features)
-    
-    features_df = pd.DataFrame(features_list)
-    return features_df
-
-def main():
-    print("Loading training data...")
-    # Load main training data
-    train_df = pd.read_csv(TRAIN_PATH)
-    print(f"Main training data shape: {train_df.shape}")
-    
-    # Load and combine supplementary datasets
-    print("\nLoading supplementary datasets...")
-    all_train_dfs = [train_df]
-    
-    for supp_path in SUPP_PATHS:
-        try:
-            supp_df = pd.read_csv(supp_path)
-            print(f"Loaded {supp_path}: {supp_df.shape}")
-            all_train_dfs.append(supp_df)
-        except:
-            print(f"Could not load {supp_path}")
-    
-    # Combine all training data
-    train_df = pd.concat(all_train_dfs, ignore_index=True)
-    print(f"\nCombined training data shape: {train_df.shape}")
-    
-    # Load test data
-    print("\nLoading test data...")
-    test_df = pd.read_csv(TEST_PATH)
-    print(f"Test data shape: {test_df.shape}")
-    
-    # Extract features
-    print("\nExtracting features from training data...")
-    X_train = prepare_features(train_df)
-    
-    print("\nExtracting features from test data...")
-    X_test = prepare_features(test_df)
-    
-    # Prepare target variables
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
-    y_train = train_df[target_columns]
-    
-    # Handle missing values in features
-    print("\nHandling missing values...")
-    imputer = SimpleImputer(strategy='mean')
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_test_imputed = imputer.transform(X_test)
-    
-    # Scale features
-    print("Scaling features...")
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_imputed)
-    X_test_scaled = scaler.transform(X_test_imputed)
-    
-    # Handle missing values in targets (fill with median)
-    print("Handling missing target values...")
-    y_train_filled = y_train.fillna(y_train.median())
-    
-    # Train Ridge regression model
-    print("\nTraining Ridge regression model...")
-    model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
-    model.fit(X_train_scaled, y_train_filled)
-    
-    # Make predictions
-    print("Making predictions...")
-    predictions = model.predict(X_test_scaled)
-    
-    # Create submission DataFrame
-    submission_df = pd.DataFrame({
-        'id': test_df['id'],
-        'Tg': predictions[:, 0],
-        'FFV': predictions[:, 1],
-        'Tc': predictions[:, 2],
-        'Density': predictions[:, 3],
-        'Rg': predictions[:, 4]
-    })
-    
-    # Save submission
-    print(f"\nSaving submission to {SUBMISSION_PATH}...")
-    submission_df.to_csv(SUBMISSION_PATH, index=False)
-    print("Done!")
-    
-    # Display submission preview
-    print("\nSubmission preview:")
-    print(submission_df.head())
-    
-    # Display feature importance (coefficients)
-    print("\nTop 5 most important features for each target:")
-    feature_names = X_train.columns
-    for idx, target in enumerate(target_columns):
-        coefs = model.estimators_[idx].coef_
-        top_features = np.argsort(np.abs(coefs))[-5:][::-1]
-        print(f"\n{target}:")
-        for feat_idx in top_features:
-            print(f"  {feature_names[feat_idx]}: {coefs[feat_idx]:.4f}")
-
-if __name__ == "__main__":
-    main()
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "137fbb0f",
+   "metadata": {
+    "_cell_guid": "474ffc61-f6aa-49ac-a2c7-20e364d5d548",
+    "_uuid": "aa76bad4-b75a-40ab-a3e4-b7bb69673379",
+    "collapsed": false,
+    "execution": {
+     "iopub.execute_input": "2025-07-10T08:11:45.139919Z",
+     "iopub.status.busy": "2025-07-10T08:11:45.139552Z",
+     "iopub.status.idle": "2025-07-10T08:12:17.087598Z",
+     "shell.execute_reply": "2025-07-10T08:12:17.086220Z"
+    },
+    "jupyter": {
+     "outputs_hidden": false
+    },
+    "papermill": {
+     "duration": 31.953261,
+     "end_time": "2025-07-10T08:12:17.089275",
+     "exception": false,
+     "start_time": "2025-07-10T08:11:45.136014",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Collecting rdkit\r\n",
+      "  Downloading rdkit-2025.3.3-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (4.0 kB)\r\n",
+      "Requirement already satisfied: numpy in /usr/local/lib/python3.11/dist-packages (from rdkit) (1.26.4)\r\n",
+      "Requirement already satisfied: Pillow in /usr/local/lib/python3.11/dist-packages (from rdkit) (11.2.1)\r\n",
+      "Requirement already satisfied: mkl_fft in /usr/local/lib/python3.11/dist-packages (from numpy->rdkit) (1.3.8)\r\n",
+      "Requirement already satisfied: mkl_random in /usr/local/lib/python3.11/dist-packages (from numpy->rdkit) (1.2.4)\r\n",
+      "Requirement already satisfied: mkl_umath in /usr/local/lib/python3.11/dist-packages (from numpy->rdkit) (0.1.1)\r\n",
+      "Requirement already satisfied: mkl in /usr/local/lib/python3.11/dist-packages (from numpy->rdkit) (2025.2.0)\r\n",
+      "Requirement already satisfied: tbb4py in /usr/local/lib/python3.11/dist-packages (from numpy->rdkit) (2022.2.0)\r\n",
+      "Requirement already satisfied: mkl-service in /usr/local/lib/python3.11/dist-packages (from numpy->rdkit) (2.4.1)\r\n",
+      "Requirement already satisfied: intel-openmp<2026,>=2024 in /usr/local/lib/python3.11/dist-packages (from mkl->numpy->rdkit) (2024.2.0)\r\n",
+      "Requirement already satisfied: tbb==2022.* in /usr/local/lib/python3.11/dist-packages (from mkl->numpy->rdkit) (2022.2.0)\r\n",
+      "Requirement already satisfied: tcmlib==1.* in /usr/local/lib/python3.11/dist-packages (from tbb==2022.*->mkl->numpy->rdkit) (1.4.0)\r\n",
+      "Requirement already satisfied: intel-cmplr-lib-rt in /usr/local/lib/python3.11/dist-packages (from mkl_umath->numpy->rdkit) (2024.2.0)\r\n",
+      "Requirement already satisfied: intel-cmplr-lib-ur==2024.2.0 in /usr/local/lib/python3.11/dist-packages (from intel-openmp<2026,>=2024->mkl->numpy->rdkit) (2024.2.0)\r\n",
+      "Downloading rdkit-2025.3.3-cp311-cp311-manylinux_2_28_x86_64.whl (34.9 MB)\r\n",
+      "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m34.9/34.9 MB\u001b[0m \u001b[31m46.4 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\r\n",
+      "\u001b[?25hInstalling collected packages: rdkit\r\n",
+      "Successfully installed rdkit-2025.3.3\r\n",
+      "Loading training data...\n",
+      "Main training data shape: (7973, 7)\n",
+      "\n",
+      "Loading supplementary datasets...\n",
+      "Loaded /kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv: (874, 2)\n",
+      "Loaded /kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv: (7208, 1)\n",
+      "Loaded /kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv: (46, 2)\n",
+      "Loaded /kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv: (862, 2)\n",
+      "\n",
+      "Combined training data shape: (16963, 8)\n",
+      "\n",
+      "Loading test data...\n",
+      "Test data shape: (3, 2)\n",
+      "\n",
+      "Extracting features from training data...\n",
+      "Extracting molecular features...\n",
+      "Processing molecule 0/16963...\n",
+      "Processing molecule 1000/16963...\n",
+      "Processing molecule 2000/16963...\n",
+      "Processing molecule 3000/16963...\n",
+      "Processing molecule 4000/16963...\n",
+      "Processing molecule 5000/16963...\n",
+      "Processing molecule 6000/16963...\n",
+      "Processing molecule 7000/16963...\n",
+      "Processing molecule 8000/16963...\n",
+      "Processing molecule 9000/16963...\n",
+      "Processing molecule 10000/16963...\n",
+      "Processing molecule 11000/16963...\n",
+      "Processing molecule 12000/16963...\n",
+      "Processing molecule 13000/16963...\n",
+      "Processing molecule 14000/16963...\n",
+      "Processing molecule 15000/16963...\n",
+      "Processing molecule 16000/16963...\n",
+      "\n",
+      "Extracting features from test data...\n",
+      "Extracting molecular features...\n",
+      "Processing molecule 0/3...\n",
+      "\n",
+      "Handling missing values...\n",
+      "Scaling features...\n",
+      "Handling missing target values...\n",
+      "\n",
+      "Training Ridge regression model...\n",
+      "Making predictions...\n",
+      "\n",
+      "Saving submission to /kaggle/working/submission.csv...\n",
+      "Done!\n",
+      "\n",
+      "Submission preview:\n",
+      "           id         Tg       FFV        Tc   Density         Rg\n",
+      "0  1109053969  78.564135  0.365401  0.236883  0.949541  15.101696\n",
+      "1  1422188626  78.564135  0.365401  0.236883  0.949541  15.101696\n",
+      "2  2032016830  78.564135  0.365401  0.236883  0.949541  15.101696\n",
+      "\n",
+      "Top 5 most important features for each target:\n",
+      "\n",
+      "Tg:\n",
+      "  FractionCsp3: 0.0000\n",
+      "  MolMR: 0.0000\n",
+      "  RingCount: 0.0000\n",
+      "  NumSaturatedRings: 0.0000\n",
+      "  NumAliphaticRings: 0.0000\n",
+      "\n",
+      "FFV:\n",
+      "  FractionCsp3: 0.0000\n",
+      "  MolMR: 0.0000\n",
+      "  RingCount: 0.0000\n",
+      "  NumSaturatedRings: 0.0000\n",
+      "  NumAliphaticRings: 0.0000\n",
+      "\n",
+      "Tc:\n",
+      "  FractionCsp3: 0.0000\n",
+      "  MolMR: 0.0000\n",
+      "  RingCount: 0.0000\n",
+      "  NumSaturatedRings: 0.0000\n",
+      "  NumAliphaticRings: 0.0000\n",
+      "\n",
+      "Density:\n",
+      "  FractionCsp3: 0.0000\n",
+      "  MolMR: 0.0000\n",
+      "  RingCount: 0.0000\n",
+      "  NumSaturatedRings: 0.0000\n",
+      "  NumAliphaticRings: 0.0000\n",
+      "\n",
+      "Rg:\n",
+      "  FractionCsp3: 0.0000\n",
+      "  MolMR: 0.0000\n",
+      "  RingCount: 0.0000\n",
+      "  NumSaturatedRings: 0.0000\n",
+      "  NumAliphaticRings: 0.0000\n"
+     ]
+    }
+   ],
+   "source": [
+    "#!/usr/bin/env python3\n",
+    "\"\"\"\n",
+    "Baseline Ridge Regression Model for NeurIPS Open Polymer Prediction 2025\n",
+    "This script is designed to run directly in a Kaggle notebook without any modifications.\n",
+    "\"\"\"\n",
+    "\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "from sklearn.linear_model import Ridge\n",
+    "from sklearn.multioutput import MultiOutputRegressor\n",
+    "from sklearn.preprocessing import StandardScaler\n",
+    "from sklearn.impute import SimpleImputer\n",
+    "!pip install rdkit\n",
+    "from rdkit import Chem\n",
+    "from rdkit.Chem import Descriptors, Crippen, Lipinski\n",
+    "import warnings\n",
+    "warnings.filterwarnings('ignore')\n",
+    "\n",
+    "# Kaggle competition paths\n",
+    "TRAIN_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/train.csv'\n",
+    "TEST_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/test.csv'\n",
+    "SUBMISSION_PATH = '/kaggle/working/submission.csv'\n",
+    "\n",
+    "# Supplementary dataset paths\n",
+    "SUPP_PATHS = [\n",
+    "    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv',\n",
+    "    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv',\n",
+    "    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv',\n",
+    "    '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv'\n",
+    "]\n",
+    "\n",
+    "def extract_molecular_features(smiles):\n",
+    "    \"\"\"Extract molecular descriptors from SMILES string\"\"\"\n",
+    "    features = {}\n",
+    "    \n",
+    "    try:\n",
+    "        mol = Chem.MolFromSmiles(smiles)\n",
+    "        if mol is None:\n",
+    "            # Return default values if SMILES parsing fails\n",
+    "            return {\n",
+    "                'MolWt': 0, 'LogP': 0, 'NumHDonors': 0, 'NumHAcceptors': 0,\n",
+    "                'NumRotatableBonds': 0, 'NumHeteroatoms': 0, 'NumAromaticRings': 0,\n",
+    "                'TPSA': 0, 'NumAtoms': 0, 'NumHeavyAtoms': 0,\n",
+    "                'NumAliphaticRings': 0, 'NumSaturatedRings': 0, 'RingCount': 0,\n",
+    "                'MolMR': 0, 'FractionCsp3': 0\n",
+    "            }\n",
+    "        \n",
+    "        # Basic molecular properties\n",
+    "        features['MolWt'] = Descriptors.MolWt(mol)\n",
+    "        features['LogP'] = Descriptors.MolLogP(mol)\n",
+    "        features['NumHDonors'] = Descriptors.NumHDonors(mol)\n",
+    "        features['NumHAcceptors'] = Descriptors.NumHAcceptors(mol)\n",
+    "        features['NumRotatableBonds'] = Descriptors.NumRotatableBonds(mol)\n",
+    "        features['NumHeteroatoms'] = Descriptors.NumHeteroatoms(mol)\n",
+    "        features['NumAromaticRings'] = Descriptors.NumAromaticRings(mol)\n",
+    "        features['TPSA'] = Descriptors.TPSA(mol)\n",
+    "        features['NumAtoms'] = mol.GetNumAtoms()\n",
+    "        features['NumHeavyAtoms'] = mol.GetNumHeavyAtoms()\n",
+    "        features['NumAliphaticRings'] = Descriptors.NumAliphaticRings(mol)\n",
+    "        features['NumSaturatedRings'] = Descriptors.NumSaturatedRings(mol)\n",
+    "        features['RingCount'] = Descriptors.RingCount(mol)\n",
+    "        features['MolMR'] = Crippen.MolMR(mol)\n",
+    "        features['FractionCsp3'] = Descriptors.FractionCsp3(mol)\n",
+    "        \n",
+    "    except:\n",
+    "        # Return default values if any error occurs\n",
+    "        features = {\n",
+    "            'MolWt': 0, 'LogP': 0, 'NumHDonors': 0, 'NumHAcceptors': 0,\n",
+    "            'NumRotatableBonds': 0, 'NumHeteroatoms': 0, 'NumAromaticRings': 0,\n",
+    "            'TPSA': 0, 'NumAtoms': 0, 'NumHeavyAtoms': 0,\n",
+    "            'NumAliphaticRings': 0, 'NumSaturatedRings': 0, 'RingCount': 0,\n",
+    "            'MolMR': 0, 'FractionCsp3': 0\n",
+    "        }\n",
+    "    \n",
+    "    return features\n",
+    "\n",
+    "def prepare_features(df):\n",
+    "    \"\"\"Convert SMILES to molecular features\"\"\"\n",
+    "    print(\"Extracting molecular features...\")\n",
+    "    features_list = []\n",
+    "    \n",
+    "    for idx, smiles in enumerate(df['SMILES']):\n",
+    "        if idx % 1000 == 0:\n",
+    "            print(f\"Processing molecule {idx}/{len(df)}...\")\n",
+    "        features = extract_molecular_features(smiles)\n",
+    "        features_list.append(features)\n",
+    "    \n",
+    "    features_df = pd.DataFrame(features_list)\n",
+    "    return features_df\n",
+    "\n",
+    "def main():\n",
+    "    print(\"Loading training data...\")\n",
+    "    # Load main training data\n",
+    "    train_df = pd.read_csv(TRAIN_PATH)\n",
+    "    print(f\"Main training data shape: {train_df.shape}\")\n",
+    "    \n",
+    "    # Load and combine supplementary datasets\n",
+    "    print(\"\\nLoading supplementary datasets...\")\n",
+    "    all_train_dfs = [train_df]\n",
+    "    \n",
+    "    for supp_path in SUPP_PATHS:\n",
+    "        try:\n",
+    "            supp_df = pd.read_csv(supp_path)\n",
+    "            print(f\"Loaded {supp_path}: {supp_df.shape}\")\n",
+    "            all_train_dfs.append(supp_df)\n",
+    "        except:\n",
+    "            print(f\"Could not load {supp_path}\")\n",
+    "    \n",
+    "    # Combine all training data\n",
+    "    train_df = pd.concat(all_train_dfs, ignore_index=True)\n",
+    "    print(f\"\\nCombined training data shape: {train_df.shape}\")\n",
+    "    \n",
+    "    # Load test data\n",
+    "    print(\"\\nLoading test data...\")\n",
+    "    test_df = pd.read_csv(TEST_PATH)\n",
+    "    print(f\"Test data shape: {test_df.shape}\")\n",
+    "    \n",
+    "    # Extract features\n",
+    "    print(\"\\nExtracting features from training data...\")\n",
+    "    X_train = prepare_features(train_df)\n",
+    "    \n",
+    "    print(\"\\nExtracting features from test data...\")\n",
+    "    X_test = prepare_features(test_df)\n",
+    "    \n",
+    "    # Prepare target variables\n",
+    "    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']\n",
+    "    y_train = train_df[target_columns]\n",
+    "    \n",
+    "    # Handle missing values in features\n",
+    "    print(\"\\nHandling missing values...\")\n",
+    "    imputer = SimpleImputer(strategy='mean')\n",
+    "    X_train_imputed = imputer.fit_transform(X_train)\n",
+    "    X_test_imputed = imputer.transform(X_test)\n",
+    "    \n",
+    "    # Scale features\n",
+    "    print(\"Scaling features...\")\n",
+    "    scaler = StandardScaler()\n",
+    "    X_train_scaled = scaler.fit_transform(X_train_imputed)\n",
+    "    X_test_scaled = scaler.transform(X_test_imputed)\n",
+    "    \n",
+    "    # Handle missing values in targets (fill with median)\n",
+    "    print(\"Handling missing target values...\")\n",
+    "    y_train_filled = y_train.fillna(y_train.median())\n",
+    "    \n",
+    "    # Train Ridge regression model\n",
+    "    print(\"\\nTraining Ridge regression model...\")\n",
+    "    model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))\n",
+    "    model.fit(X_train_scaled, y_train_filled)\n",
+    "    \n",
+    "    # Make predictions\n",
+    "    print(\"Making predictions...\")\n",
+    "    predictions = model.predict(X_test_scaled)\n",
+    "    \n",
+    "    # Create submission DataFrame\n",
+    "    submission_df = pd.DataFrame({\n",
+    "        'id': test_df['id'],\n",
+    "        'Tg': predictions[:, 0],\n",
+    "        'FFV': predictions[:, 1],\n",
+    "        'Tc': predictions[:, 2],\n",
+    "        'Density': predictions[:, 3],\n",
+    "        'Rg': predictions[:, 4]\n",
+    "    })\n",
+    "    \n",
+    "    # Save submission\n",
+    "    print(f\"\\nSaving submission to {SUBMISSION_PATH}...\")\n",
+    "    submission_df.to_csv(SUBMISSION_PATH, index=False)\n",
+    "    print(\"Done!\")\n",
+    "    \n",
+    "    # Display submission preview\n",
+    "    print(\"\\nSubmission preview:\")\n",
+    "    print(submission_df.head())\n",
+    "    \n",
+    "    # Display feature importance (coefficients)\n",
+    "    print(\"\\nTop 5 most important features for each target:\")\n",
+    "    feature_names = X_train.columns\n",
+    "    for idx, target in enumerate(target_columns):\n",
+    "        coefs = model.estimators_[idx].coef_\n",
+    "        top_features = np.argsort(np.abs(coefs))[-5:][::-1]\n",
+    "        print(f\"\\n{target}:\")\n",
+    "        for feat_idx in top_features:\n",
+    "            print(f\"  {feature_names[feat_idx]}: {coefs[feat_idx]:.4f}\")\n",
+    "\n",
+    "if __name__ == \"__main__\":\n",
+    "    main()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kaggle": {
+   "accelerator": "none",
+   "dataSources": [
+    {
+     "databundleVersionId": 12966160,
+     "sourceId": 74608,
+     "sourceType": "competition"
+    }
+   ],
+   "dockerImageVersionId": 31089,
+   "isGpuEnabled": false,
+   "isInternetEnabled": true,
+   "language": "python",
+   "sourceType": "notebook"
+  },
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.13"
+  },
+  "papermill": {
+   "default_parameters": {},
+   "duration": 37.595162,
+   "end_time": "2025-07-10T08:12:17.813584",
+   "environment_variables": {},
+   "exception": null,
+   "input_path": "__notebook__.ipynb",
+   "output_path": "__notebook__.ipynb",
+   "parameters": {},
+   "start_time": "2025-07-10T08:11:40.218422",
+   "version": "2.6.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
