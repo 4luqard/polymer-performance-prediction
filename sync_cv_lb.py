@@ -13,19 +13,31 @@ from sklearn.linear_model import LinearRegression
 import os
 
 def run_cv():
-    """Run cross-validation and extract score"""
+    """Run cross-validation and extract scores"""
     print("Running cross-validation...")
     result = subprocess.run([sys.executable, "cross_validation.py"], 
                           capture_output=True, text=True)
     
-    # Parse CV score and individual scores
+    # Parse different scores
     cv_score = None
+    test_score = None
+    holdout_score = None
     individual_scores = {}
     
     for line in result.stdout.split('\n'):
-        if "Overall Competition Metric (wMAE):" in line:
+        if "Cross-Validation Score:" in line:
             try:
                 cv_score = float(line.split(':')[1].split('(')[0].strip())
+            except:
+                pass
+        elif "Test Set Score:" in line:
+            try:
+                test_score = float(line.split(':')[1].strip())
+            except:
+                pass
+        elif "Holdout Set Score:" in line:
+            try:
+                holdout_score = float(line.split(':')[1].strip())
             except:
                 pass
         # Parse individual scores
@@ -40,7 +52,7 @@ def run_cv():
         elif "Rg:" in line and "±" in line:
             individual_scores['Rg'] = float(line.split(':')[1].split('(')[0].strip())
     
-    return cv_score, individual_scores
+    return cv_score, test_score, holdout_score, individual_scores
 
 def update_tracking(cv_score, lb_score, notes=""):
     """Update CV/LB tracking file"""
@@ -149,14 +161,18 @@ def main():
     print("=== CV/LB Synchronization ===\n")
     
     # Step 1: Run CV
-    cv_score, individual_scores = run_cv()
-    if cv_score is None:
-        print("Failed to get CV score")
+    cv_score, test_score, holdout_score, individual_scores = run_cv()
+    if holdout_score is None:
+        print("Failed to get holdout score")
         return
     
     print(f"\nCV Score: {cv_score:.4f}")
+    print(f"Test Score: {test_score:.4f}")
+    print(f"Holdout Score: {holdout_score:.4f}")
     print(f"LB Score: {lb_score:.4f}")
-    print(f"Gap Ratio: {lb_score/cv_score:.2f}x")
+    
+    # Use holdout score for comparison
+    print(f"\nGap Ratio (Holdout vs LB): {lb_score/holdout_score:.2f}x")
     
     # Step 2: Update tracking
     history = update_tracking(cv_score, lb_score, notes)

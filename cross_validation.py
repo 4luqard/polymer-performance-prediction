@@ -214,18 +214,38 @@ def prepare_features(df):
     features_df = pd.DataFrame(features_list)
     return features_df
 
-def perform_cross_validation(X, y, model_params=None, cv_folds=5):
-    """Perform cross-validation using the competition metric"""
+def perform_cross_validation(X, y, model_params=None, cv_folds=5, holdout_size=0.2, test_size=0.1):
+    """
+    Perform cross-validation with train/val/test/holdout splits
+    
+    Args:
+        X: Features
+        y: Targets
+        model_params: Model parameters
+        cv_folds: Number of CV folds
+        holdout_size: Fraction to hold out completely (never seen during CV)
+        test_size: Fraction for test set (within CV)
+    """
     if model_params is None:
         model_params = {'alpha': 1.0, 'random_state': 42}
     
-    print(f"\nPerforming {cv_folds}-fold cross-validation...")
-    print(f"Model parameters: {model_params}")
+    print(f"\n=== Advanced Cross-Validation Setup ===")
+    print(f"Total samples: {len(X)}")
     
-    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    cv_scores = []
-    cv_individual_scores = {col: [] for col in y.columns}
-    fold_predictions = []
+    # Step 1: Create holdout set (completely unseen data)
+    from sklearn.model_selection import train_test_split
+    X_cv, X_holdout, y_cv, y_holdout = train_test_split(
+        X, y, test_size=holdout_size, random_state=42, stratify=None
+    )
+    print(f"Holdout set: {len(X_holdout)} samples ({holdout_size*100:.0f}%)")
+    print(f"CV set: {len(X_cv)} samples ({(1-holdout_size)*100:.0f}%)")
+    
+    # Step 2: Within CV set, create test set
+    X_trainval, X_test, y_trainval, y_test = train_test_split(
+        X_cv, y_cv, test_size=test_size/(1-holdout_size), random_state=42
+    )
+    print(f"Test set: {len(X_test)} samples ({test_size*100:.0f}% of total)")
+    print(f"Train+Val set: {len(X_trainval)} samples")
     
     # Get target column names
     if isinstance(y, pd.DataFrame):
@@ -233,61 +253,94 @@ def perform_cross_validation(X, y, model_params=None, cv_folds=5):
     else:
         target_names = [f'Target_{i}' for i in range(y.shape[1])]
     
-    # Perform CV with multi-output model
-    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
+    print(f"\nPerforming {cv_folds}-fold cross-validation on train+val set...")
+    print(f"Model parameters: {model_params}")
+    
+    # Step 3: Perform CV on train+val set
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv_scores = []
+    cv_individual_scores = {col: [] for col in target_names}
+    best_fold_model = None
+    best_fold_score = float('inf')
+    
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X_trainval)):
         print(f"\nFold {fold + 1}/{cv_folds}...")
         
         # Split data
-        X_fold_train, X_fold_val = X[train_idx], X[val_idx]
-        y_fold_train, y_fold_val = y.iloc[train_idx], y.iloc[val_idx]
+        X_fold_train = X_trainval[train_idx]
+        X_fold_val = X_trainval[val_idx]
+        y_fold_train = y_trainval.iloc[train_idx]
+        y_fold_val = y_trainval.iloc[val_idx]
+        
+        print(f"  Train: {len(train_idx)}, Val: {len(val_idx)}")
         
         # Train multi-output model
         fold_model = MultiOutputRegressor(Ridge(**model_params))
         fold_model.fit(X_fold_train, y_fold_train.fillna(y_fold_train.median()))
         
-        # Predict
+        # Predict on validation
         y_pred = fold_model.predict(X_fold_val)
-        y_pred_df = pd.DataFrame(y_pred, columns=target_names, index=val_idx)
+        y_pred_df = pd.DataFrame(y_pred, columns=target_names, index=y_fold_val.index)
         
         # Calculate competition metric
         score, individual = neurips_polymer_metric(y_fold_val, y_pred_df, target_names)
         
         if not np.isnan(score):
             cv_scores.append(score)
-            print(f"  Fold {fold + 1} score: {score:.4f}")
+            print(f"  Fold {fold + 1} validation score: {score:.4f}")
+            
+            # Track best model
+            if score < best_fold_score:
+                best_fold_score = score
+                best_fold_model = fold_model
+            
             for target in target_names:
                 if target in individual and not np.isnan(individual[target]):
                     cv_individual_scores[target].append(individual[target])
-        
-        fold_predictions.append({
-            'fold': fold + 1,
-            'val_idx': val_idx,
-            'y_true': y_fold_val,
-            'y_pred': y_pred_df,
-            'score': score,
-            'individual_scores': individual
-        })
+    
+    # Step 4: Evaluate best model on test set
+    print(f"\n=== Test Set Evaluation ===")
+    y_test_pred = best_fold_model.predict(X_test)
+    y_test_pred_df = pd.DataFrame(y_test_pred, columns=target_names, index=y_test.index)
+    test_score, test_individual = neurips_polymer_metric(y_test, y_test_pred_df, target_names)
+    print(f"Test set score: {test_score:.4f}")
+    
+    # Step 5: Train final model on all train+val+test and evaluate on holdout
+    print(f"\n=== Holdout Set Evaluation ===")
+    final_model = MultiOutputRegressor(Ridge(**model_params))
+    final_model.fit(X_cv, y_cv.fillna(y_cv.median()))
+    
+    y_holdout_pred = final_model.predict(X_holdout)
+    y_holdout_pred_df = pd.DataFrame(y_holdout_pred, columns=target_names, index=y_holdout.index)
+    holdout_score, holdout_individual = neurips_polymer_metric(y_holdout, y_holdout_pred_df, target_names)
+    print(f"Holdout set score: {holdout_score:.4f}")
     
     # Calculate summary statistics
     results = {
-        'mean_score': np.mean(cv_scores) if cv_scores else np.nan,
-        'std_score': np.std(cv_scores) if cv_scores else np.nan,
-        'all_scores': cv_scores,
+        'cv_mean_score': np.mean(cv_scores) if cv_scores else np.nan,
+        'cv_std_score': np.std(cv_scores) if cv_scores else np.nan,
+        'cv_all_scores': cv_scores,
+        'test_score': test_score,
+        'holdout_score': holdout_score,
         'individual_targets': {},
-        'fold_predictions': fold_predictions
+        'split_sizes': {
+            'total': len(X),
+            'holdout': len(X_holdout),
+            'test': len(X_test),
+            'train_val': len(X_trainval),
+            'cv_train_avg': len(X_trainval) * (cv_folds-1) / cv_folds,
+            'cv_val_avg': len(X_trainval) / cv_folds
+        }
     }
     
+    # Individual target results
     for target in target_names:
-        if cv_individual_scores[target]:
-            results['individual_targets'][target] = {
-                'mean': np.mean(cv_individual_scores[target]),
-                'std': np.std(cv_individual_scores[target])
-            }
-        else:
-            results['individual_targets'][target] = {
-                'mean': np.nan,
-                'std': np.nan
-            }
+        results['individual_targets'][target] = {
+            'cv_mean': np.mean(cv_individual_scores[target]) if cv_individual_scores[target] else np.nan,
+            'cv_std': np.std(cv_individual_scores[target]) if cv_individual_scores[target] else np.nan,
+            'test': test_individual.get(target, np.nan),
+            'holdout': holdout_individual.get(target, np.nan)
+        }
     
     return results
 
@@ -362,12 +415,13 @@ def main():
             cv_folds=5
         )
         
-        mean_score = cv_results['mean_score']
+        mean_score = cv_results['cv_mean_score']
         if mean_score < best_score:
             best_score = mean_score
             best_alpha = alpha
         
-        print(f"\nAlpha {alpha} - Competition Metric (CV): {mean_score:.4f} (+/- {cv_results['std_score']:.4f})")
+        print(f"\nAlpha {alpha} - CV: {mean_score:.4f} (+/- {cv_results['cv_std_score']:.4f}), "
+              f"Test: {cv_results['test_score']:.4f}, Holdout: {cv_results['holdout_score']:.4f}")
     
     # Run final cross-validation with best alpha
     print(f"\n=== Final Cross-Validation with best alpha = {best_alpha} ===")
@@ -379,18 +433,30 @@ def main():
     
     # Display results
     print(f"\n=== Final Results ===")
-    print(f"Overall Competition Metric (wMAE): {cv_results['mean_score']:.4f} (+/- {cv_results['std_score']:.4f})")
+    print(f"Cross-Validation Score: {cv_results['cv_mean_score']:.4f} (+/- {cv_results['cv_std_score']:.4f})")
+    print(f"Test Set Score: {cv_results['test_score']:.4f}")
+    print(f"Holdout Set Score: {cv_results['holdout_score']:.4f}")
     
-    print("\nIndividual Target Scores (scaled MAE):")
+    print("\nIndividual Target Scores:")
+    print(f"{'Target':<10} {'CV Mean':>10} {'CV Std':>10} {'Test':>10} {'Holdout':>10}")
+    print("-" * 54)
     for target, scores in cv_results['individual_targets'].items():
-        if not np.isnan(scores['mean']):
-            print(f"  {target}: {scores['mean']:.4f} (+/- {scores['std']:.4f})")
-        else:
-            print(f"  {target}: No data")
+        print(f"{target:<10} {scores['cv_mean']:>10.4f} {scores['cv_std']:>10.4f} "
+              f"{scores['test']:>10.4f} {scores['holdout']:>10.4f}")
     
-    print(f"\nFold scores: {cv_results['all_scores']}")
-    print(f"Mean: {cv_results['mean_score']:.4f}")
-    print(f"Std: {cv_results['std_score']:.4f}")
+    print(f"\nData Split Sizes:")
+    splits = cv_results['split_sizes']
+    print(f"  Total samples: {splits['total']}")
+    print(f"  Holdout: {splits['holdout']} (20%)")
+    print(f"  Test: {splits['test']} (10%)")
+    print(f"  Train+Val: {splits['train_val']} (70%)")
+    print(f"  CV avg train: {splits['cv_train_avg']:.0f}")
+    print(f"  CV avg val: {splits['cv_val_avg']:.0f}")
+    
+    print(f"\nCV Fold scores: {[f'{s:.4f}' for s in cv_results['cv_all_scores']]}")
+    
+    # Use holdout score for LB estimation
+    print(f"\n💡 For LB estimation, use the holdout score: {cv_results['holdout_score']:.4f}")
     
     print("\n=== Cross-validation complete ===")
     return cv_results
