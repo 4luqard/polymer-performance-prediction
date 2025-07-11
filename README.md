@@ -48,11 +48,11 @@ The competition uses a weighted Mean Absolute Error (wMAE) metric that:
 
 ## Model Description
 
-The baseline model (`model.py`) uses:
-- **Feature Engineering**: Extracts 45+ molecular features from SMILES strings without external dependencies
-- **Algorithm**: Ridge regression with multi-output wrapper
+The current best model (`model.py`) uses:
+- **Feature Engineering**: Extracts 43 molecular features from SMILES strings without external dependencies
+- **Algorithm**: Separate Ridge regression models for each target property
 - **Data**: Combines main training data with 4 supplementary datasets (~17k samples total)
-- **Validation**: 5-fold cross-validation for quick performance feedback
+- **Key Innovation**: Trains on only non-missing values for each target (avoiding imputation noise)
 
 ### Key Features Extracted:
 - Atom counts (C, O, N, S, F, Cl, Br, etc.)
@@ -63,9 +63,9 @@ The baseline model (`model.py`) uses:
 - Derived features (flexibility score, heteroatom ratio, etc.)
 
 ### Current Performance:
-- **Local CV**: 0.0122 (±0.0002)
-- **Local Holdout**: 0.0118
-- **Public LB**: 0.158 (~13x higher - see Key Findings)
+- **MultiOutput Model**: CV: 0.0122, Holdout: 0.0118, LB: 0.158
+- **Separate Models**: CV: 0.0709, Holdout: 0.0616, LB: 0.081 ✨
+- **Best LB**: 0.081 (using separate Ridge models per target)
 
 ## Usage
 
@@ -119,18 +119,18 @@ The competition provides:
 
 1. **Extreme Data Sparsity**: 
    - 0 samples have all 5 targets
-   - Only FFV has 88% coverage, others <10%
+   - Only FFV has 46.5% coverage, others 3-4%
    - Almost no target overlap (Tg and FFV share only 1 sample)
 
-2. **CV/LB Gap (13x)**:
-   - Local scores ~0.012, LB scores ~0.158
-   - Likely due to test set distribution differences
-   - Use `sync_cv_lb.py` to track correlation
+2. **Separate Models Work Better**:
+   - Training individual models per target improved LB from 0.158 to 0.081
+   - Holdout score (0.0616) is a better LB predictor than CV score
+   - Gap reduced from 13x to 1.3x (holdout vs LB)
 
-3. **Target LB Scores** (based on current ratio):
-   - LB 0.15 → Need CV 0.0114
-   - LB 0.14 → Need CV 0.0106
-   - LB 0.10 → Need CV 0.0076
+3. **Target-Specific Training**:
+   - Each model trains only on available data for that target
+   - Uses different regularization (alpha) per target based on data availability
+   - Avoids noise from imputed values
 
 ## Requirements
 

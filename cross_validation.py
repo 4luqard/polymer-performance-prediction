@@ -214,7 +214,88 @@ def prepare_features(df):
     features_df = pd.DataFrame(features_list)
     return features_df
 
-def perform_cross_validation(X, y, model_params=None, cv_folds=5, holdout_size=0.2, test_size=0.1):
+def train_separate_models(X_train, y_train, target_names, use_separate=True):
+    """
+    Train separate Ridge models for each target or a single MultiOutputRegressor
+    
+    Args:
+        X_train: Training features
+        y_train: Training targets (DataFrame)
+        target_names: List of target column names
+        use_separate: If True, train separate models; if False, use MultiOutputRegressor
+    
+    Returns:
+        Dictionary of models or MultiOutputRegressor
+    """
+    if not use_separate:
+        # Original approach
+        model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
+        model.fit(X_train, y_train.fillna(y_train.median()))
+        return model
+    
+    # Separate models approach
+    models = {}
+    target_alphas = {
+        'Tg': 10.0,      # Higher regularization for sparse target
+        'FFV': 1.0,      # Lower regularization for dense target
+        'Tc': 10.0,      # Higher regularization for sparse target
+        'Density': 5.0,  # Medium regularization
+        'Rg': 10.0       # Higher regularization for sparse target
+    }
+    
+    for target in target_names:
+        # Get non-missing samples for this target
+        mask = ~y_train[target].isna()
+        n_samples = mask.sum()
+        
+        if n_samples > 0:
+            # Train on samples with valid target values
+            X_target = X_train[mask]
+            y_target = y_train[target][mask]
+            
+            # Use target-specific alpha
+            alpha = target_alphas.get(target, 1.0)
+            
+            # Train Ridge model for this target
+            model = Ridge(alpha=alpha, random_state=42)
+            model.fit(X_target, y_target)
+            models[target] = model
+        else:
+            # No samples available
+            models[target] = None
+    
+    return models
+
+def predict_with_models(models, X_test, y_train, target_names):
+    """
+    Make predictions using separate models or MultiOutputRegressor
+    
+    Args:
+        models: Dictionary of models or MultiOutputRegressor
+        X_test: Test features
+        y_train: Training targets (for median fallback)
+        target_names: List of target column names
+    
+    Returns:
+        Predictions as numpy array
+    """
+    if isinstance(models, MultiOutputRegressor):
+        # Original approach
+        return models.predict(X_test)
+    
+    # Separate models approach
+    predictions = np.zeros((len(X_test), len(target_names)))
+    
+    for i, target in enumerate(target_names):
+        if target in models and models[target] is not None:
+            predictions[:, i] = models[target].predict(X_test)
+        else:
+            # Use median if no model available
+            predictions[:, i] = y_train[target].median()
+    
+    return predictions
+
+def perform_cross_validation(X, y, model_params=None, cv_folds=5, holdout_size=0.2, test_size=0.1, use_separate_models=False):
     """
     Perform cross-validation with train/val/test/holdout splits
     
@@ -225,6 +306,7 @@ def perform_cross_validation(X, y, model_params=None, cv_folds=5, holdout_size=0
         cv_folds: Number of CV folds
         holdout_size: Fraction to hold out completely (never seen during CV)
         test_size: Fraction for test set (within CV)
+        use_separate_models: If True, train separate models for each target
     """
     if model_params is None:
         model_params = {'alpha': 1.0, 'random_state': 42}
@@ -274,12 +356,15 @@ def perform_cross_validation(X, y, model_params=None, cv_folds=5, holdout_size=0
         
         print(f"  Train: {len(train_idx)}, Val: {len(val_idx)}")
         
-        # Train multi-output model
-        fold_model = MultiOutputRegressor(Ridge(**model_params))
-        fold_model.fit(X_fold_train, y_fold_train.fillna(y_fold_train.median()))
+        # Train model(s)
+        if use_separate_models:
+            fold_model = train_separate_models(X_fold_train, y_fold_train, target_names, use_separate=True)
+        else:
+            fold_model = MultiOutputRegressor(Ridge(**model_params))
+            fold_model.fit(X_fold_train, y_fold_train.fillna(y_fold_train.median()))
         
         # Predict on validation
-        y_pred = fold_model.predict(X_fold_val)
+        y_pred = predict_with_models(fold_model, X_fold_val, y_fold_train, target_names)
         y_pred_df = pd.DataFrame(y_pred, columns=target_names, index=y_fold_val.index)
         
         # Calculate competition metric
@@ -300,17 +385,20 @@ def perform_cross_validation(X, y, model_params=None, cv_folds=5, holdout_size=0
     
     # Step 4: Evaluate best model on test set
     print(f"\n=== Test Set Evaluation ===")
-    y_test_pred = best_fold_model.predict(X_test)
+    y_test_pred = predict_with_models(best_fold_model, X_test, y_trainval, target_names)
     y_test_pred_df = pd.DataFrame(y_test_pred, columns=target_names, index=y_test.index)
     test_score, test_individual = neurips_polymer_metric(y_test, y_test_pred_df, target_names)
     print(f"Test set score: {test_score:.4f}")
     
     # Step 5: Train final model on all train+val+test and evaluate on holdout
     print(f"\n=== Holdout Set Evaluation ===")
-    final_model = MultiOutputRegressor(Ridge(**model_params))
-    final_model.fit(X_cv, y_cv.fillna(y_cv.median()))
+    if use_separate_models:
+        final_model = train_separate_models(X_cv, y_cv, target_names, use_separate=True)
+    else:
+        final_model = MultiOutputRegressor(Ridge(**model_params))
+        final_model.fit(X_cv, y_cv.fillna(y_cv.median()))
     
-    y_holdout_pred = final_model.predict(X_holdout)
+    y_holdout_pred = predict_with_models(final_model, X_holdout, y_cv, target_names)
     y_holdout_pred_df = pd.DataFrame(y_holdout_pred, columns=target_names, index=y_holdout.index)
     holdout_score, holdout_individual = neurips_polymer_metric(y_holdout, y_holdout_pred_df, target_names)
     print(f"Holdout set score: {holdout_score:.4f}")
@@ -430,6 +518,19 @@ def main():
         model_params={'alpha': best_alpha, 'random_state': 42},
         cv_folds=5
     )
+    
+    # Test separate models approach
+    print(f"\n=== Testing Separate Models Approach ===")
+    cv_results_separate = perform_cross_validation(
+        X_train_scaled, y_train,  # Use original y_train with NaN values
+        model_params={'alpha': best_alpha, 'random_state': 42},
+        cv_folds=5,
+        use_separate_models=True
+    )
+    
+    print(f"\n=== Comparison: MultiOutput vs Separate Models ===")
+    print(f"MultiOutput - CV: {cv_results['cv_mean_score']:.4f}, Test: {cv_results['test_score']:.4f}, Holdout: {cv_results['holdout_score']:.4f}")
+    print(f"Separate    - CV: {cv_results_separate['cv_mean_score']:.4f}, Test: {cv_results_separate['test_score']:.4f}, Holdout: {cv_results_separate['holdout_score']:.4f}")
     
     # Display results
     print(f"\n=== Final Results ===")

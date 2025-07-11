@@ -20,11 +20,11 @@ python sync_cv_lb.py 0.158 "description"
 
 ## 📊 Score Targets
 
-Based on CV/LB ratio of 13.2x:
-- **LB 0.15** → Need CV < 0.0114
-- **LB 0.14** → Need CV < 0.0106  
-- **LB 0.13** → Need CV < 0.0099
-- **LB 0.10** → Need CV < 0.0076
+Based on separate models approach (holdout/LB ratio ~1.3x):
+- **LB 0.10** → Need holdout < 0.077
+- **LB 0.09** → Need holdout < 0.069  
+- **LB 0.08** → Need holdout < 0.062
+- **LB 0.07** → Need holdout < 0.054
 
 ## 🔑 Key Files
 
@@ -48,6 +48,6 @@ If scores seem wrong:
 
 ## 📈 Current Best
 
-- Local CV: 0.0122
-- Local Holdout: 0.0118
-- Public LB: 0.158
+- Approach: Separate Ridge models per target
+- Local Holdout: 0.0616 (better LB predictor)
+- Public LB: 0.081 ✨
