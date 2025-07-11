@@ -146,11 +146,11 @@ def extract_molecular_features(smiles):
     
     # Polymer-specific features
     features['has_polymer_end'] = int('*' in smiles)
-    features['num_polymer_ends'] = smiles.count('*')
+    # features['num_polymer_ends'] = smiles.count('*')  # Removed - may cause overfitting
     
     # Functional group patterns
     features['has_carbonyl'] = int('C(=O)' in smiles or 'C=O' in smiles)
-    features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)
+    # features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)  # Removed - may cause overfitting
     features['has_ether'] = int('COC' in smiles or 'cOc' in smiles)
     features['has_amine'] = int('N' in smiles)
     features['has_sulfone'] = int('S(=O)(=O)' in smiles)
