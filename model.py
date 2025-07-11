@@ -225,15 +225,47 @@ def main():
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Train Ridge regression model on full data
-    print("\n=== Training on Full Dataset ===")
-    print("Training Ridge regression model...")
-    model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
-    model.fit(X_train_scaled, y_train_filled)
+    # Train separate Ridge regression models for each target
+    print("\n=== Training Separate Models for Each Target ===")
+    predictions = np.zeros((len(X_test_scaled), len(target_columns)))
     
-    # Make predictions
-    print("Making predictions...")
-    predictions = model.predict(X_test_scaled)
+    # Try different alpha values for each target
+    target_alphas = {
+        'Tg': 10.0,      # Higher regularization for sparse target
+        'FFV': 1.0,      # Lower regularization for dense target
+        'Tc': 10.0,      # Higher regularization for sparse target
+        'Density': 5.0,  # Medium regularization
+        'Rg': 10.0       # Higher regularization for sparse target
+    }
+    
+    for i, target in enumerate(target_columns):
+        print(f"\nTraining model for {target}...")
+        
+        # Get non-missing samples for this target
+        mask = ~y_train[target].isna()
+        n_samples = mask.sum()
+        print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
+        
+        if n_samples > 0:
+            # Train on samples with valid target values
+            X_target = X_train_scaled[mask]
+            y_target = y_train[target][mask]
+            
+            # Use target-specific alpha
+            alpha = target_alphas.get(target, 1.0)
+            print(f"  Using alpha={alpha}")
+            
+            # Train Ridge model for this target
+            model = Ridge(alpha=alpha, random_state=42)
+            model.fit(X_target, y_target)
+            
+            # Make predictions
+            predictions[:, i] = model.predict(X_test_scaled)
+            print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+        else:
+            # Use median if no samples available
+            predictions[:, i] = y_train_filled[target].median()
+            print(f"  No samples available, using median: {predictions[:, i][0]:.4f}")
     
     # Create submission DataFrame
     submission_df = pd.DataFrame({
@@ -253,16 +285,6 @@ def main():
     # Display submission preview
     print("\nSubmission preview:")
     print(submission_df)
-    
-    # Display feature importance (top 10 for each target)
-    print("\nTop 10 most important features for each target:")
-    feature_names = X_train.columns
-    for idx, target in enumerate(target_columns):
-        coefs = model.estimators_[idx].coef_
-        top_features = np.argsort(np.abs(coefs))[-10:][::-1]
-        print(f"\n{target}:")
-        for i, feat_idx in enumerate(top_features):
-            print(f"  {i+1}. {feature_names[feat_idx]}: {coefs[feat_idx]:.4f}")
     
     print("\n=== Model training complete! ===")
 
