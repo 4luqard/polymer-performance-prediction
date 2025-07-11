@@ -203,17 +203,8 @@ def main():
     print(f"Training samples: {X_train.shape[0]}")
     print(f"Test samples: {X_test.shape[0]}")
     
-    # Handle missing values in features
-    print("\nHandling missing values...")
-    imputer = SimpleImputer(strategy='mean')
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_test_imputed = imputer.transform(X_test)
-    
-    # Scale features
-    print("Scaling features...")
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_imputed)
-    X_test_scaled = scaler.transform(X_test_imputed)
+    # We'll handle missing values and scaling per target
+    print("\nPreparing for target-specific training...")
     
     # Handle missing values in targets
     print("Handling missing target values...")
@@ -227,7 +218,7 @@ def main():
     
     # Train separate Ridge regression models for each target
     print("\n=== Training Separate Models for Each Target ===")
-    predictions = np.zeros((len(X_test_scaled), len(target_columns)))
+    predictions = np.zeros((len(X_test), len(target_columns)))
     
     # Try different alpha values for each target
     target_alphas = {
@@ -247,9 +238,19 @@ def main():
         print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
         
         if n_samples > 0:
-            # Train on samples with valid target values
-            X_target = X_train_scaled[mask]
+            # Get samples with valid target values
+            X_target = X_train[mask]
             y_target = y_train[target][mask]
+            
+            # Handle missing values in features for this target's samples
+            imputer = SimpleImputer(strategy='mean')
+            X_target_imputed = imputer.fit_transform(X_target)
+            X_test_imputed = imputer.transform(X_test)
+            
+            # Scale features
+            scaler = StandardScaler()
+            X_target_scaled = scaler.fit_transform(X_target_imputed)
+            X_test_scaled = scaler.transform(X_test_imputed)
             
             # Use target-specific alpha
             alpha = target_alphas.get(target, 1.0)
@@ -257,7 +258,7 @@ def main():
             
             # Train Ridge model for this target
             model = Ridge(alpha=alpha, random_state=42)
-            model.fit(X_target, y_target)
+            model.fit(X_target_scaled, y_target)
             
             # Make predictions
             predictions[:, i] = model.predict(X_test_scaled)

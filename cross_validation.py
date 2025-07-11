@@ -227,6 +227,10 @@ def train_separate_models(X_train, y_train, target_names, use_separate=True):
     Returns:
         Dictionary of models or MultiOutputRegressor
     """
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.impute import SimpleImputer
+    from sklearn.pipeline import Pipeline
+    
     if not use_separate:
         # Original approach
         model = MultiOutputRegressor(Ridge(alpha=1.0, random_state=42))
@@ -256,10 +260,16 @@ def train_separate_models(X_train, y_train, target_names, use_separate=True):
             # Use target-specific alpha
             alpha = target_alphas.get(target, 1.0)
             
-            # Train Ridge model for this target
-            model = Ridge(alpha=alpha, random_state=42)
-            model.fit(X_target, y_target)
-            models[target] = model
+            # Create a pipeline with imputation and scaling for this target
+            pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='mean')),
+                ('scaler', StandardScaler()),
+                ('ridge', Ridge(alpha=alpha, random_state=42))
+            ])
+            
+            # Fit the pipeline
+            pipeline.fit(X_target, y_target)
+            models[target] = pipeline
         else:
             # No samples available
             models[target] = None
