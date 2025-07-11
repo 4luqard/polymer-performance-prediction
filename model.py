@@ -18,6 +18,9 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import competition metric
+from src.competition_metric import neurips_polymer_metric
+
 
 # Check if running on Kaggle or locally
 import os
@@ -246,25 +249,21 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
                 # No samples available, use median
                 fold_predictions[:, i] = y_fold_train[target].median()
         
-        # Calculate fold score (simple MAE for now)
-        fold_mae = 0
-        n_targets = 0
-        for i, target in enumerate(target_columns):
-            mask = ~y_fold_val[target].isna()
-            if mask.sum() > 0:
-                mae = np.mean(np.abs(y_fold_val[target][mask] - fold_predictions[mask, i]))
-                fold_mae += mae
-                n_targets += 1
+        # Calculate fold score using competition metric
+        # Create predictions DataFrame with proper column names and index
+        fold_pred_df = pd.DataFrame(fold_predictions, columns=target_columns, index=y_fold_val.index)
         
-        if n_targets > 0:
-            fold_mae /= n_targets
-            fold_scores.append(fold_mae)
-            print(f"  Fold {fold + 1} MAE: {fold_mae:.4f}")
+        # Calculate competition metric
+        fold_score, individual_scores = neurips_polymer_metric(y_fold_val, fold_pred_df, target_columns)
+        
+        if not np.isnan(fold_score):
+            fold_scores.append(fold_score)
+            print(f"  Fold {fold + 1} competition score: {fold_score:.4f}")
     
     cv_mean = np.mean(fold_scores)
     cv_std = np.std(fold_scores)
     
-    print(f"\nCross-Validation MAE: {cv_mean:.4f} (+/- {cv_std:.4f})")
+    print(f"\nCross-Validation Score (Competition Metric): {cv_mean:.4f} (+/- {cv_std:.4f})")
     
     return {
         'cv_mean': cv_mean,
