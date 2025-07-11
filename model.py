@@ -206,9 +206,8 @@ def main():
     # We'll handle missing values and scaling per target
     print("\nPreparing for target-specific training...")
     
-    # Handle missing values in targets
-    print("Handling missing target values...")
-    y_train_filled = y_train.fillna(y_train.median())
+    # We don't need to handle missing target values since we train separate models
+    # Each model will only use samples with valid values for its specific target
     
     # Print target statistics
     print("\nTarget value statistics:")
@@ -277,8 +276,8 @@ def main():
                 predictions[:, i] = y_train[target].median()
                 print(f"  No complete samples available, using median: {predictions[:, i][0]:.4f}")
         else:
-            # Use median if no samples available
-            predictions[:, i] = y_train_filled[target].median()
+            # Use median of available values if no samples
+            predictions[:, i] = y_train[target].median()
             print(f"  No samples available, using median: {predictions[:, i][0]:.4f}")
     
     # Create submission DataFrame
