@@ -155,11 +155,132 @@ def prepare_features(df):
     return features_df
 
 
-def main():
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
+    """
+    Perform cross-validation for separate models approach
+    
+    Args:
+        X: Features (numpy array or DataFrame)
+        y: Targets (DataFrame with multiple columns)
+        cv_folds: Number of cross-validation folds
+        target_columns: List of target column names
+    
+    Returns:
+        Dictionary with CV scores
+    """
+    from sklearn.model_selection import KFold
+    
+    if target_columns is None:
+        target_columns = y.columns.tolist()
+    
+    print(f"\n=== Cross-Validation ({cv_folds} folds) ===")
+    
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    
+    # Store scores for each fold and target
+    fold_scores = []
+    
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
+        print(f"\nFold {fold + 1}/{cv_folds}...")
+        
+        X_fold_train = X.iloc[train_idx] if hasattr(X, 'iloc') else X[train_idx]
+        X_fold_val = X.iloc[val_idx] if hasattr(X, 'iloc') else X[val_idx]
+        y_fold_train = y.iloc[train_idx]
+        y_fold_val = y.iloc[val_idx]
+        
+        # Predictions for this fold
+        fold_predictions = np.zeros((len(val_idx), len(target_columns)))
+        
+        # Train separate models for each target
+        for i, target in enumerate(target_columns):
+            # Get non-missing samples for this target
+            mask = ~y_fold_train[target].isna()
+            
+            if mask.sum() > 0:
+                # Get samples with valid target values
+                mask_indices = np.where(mask)[0]
+                X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
+                y_target = y_fold_train[target].iloc[mask_indices]
+                
+                # Further filter to only keep rows with no missing features
+                if isinstance(X_target, pd.DataFrame):
+                    feature_complete_mask = ~X_target.isnull().any(axis=1)
+                else:
+                    # For numpy arrays
+                    feature_complete_mask = ~np.isnan(X_target).any(axis=1)
+                
+                X_target_complete = X_target[feature_complete_mask]
+                y_target_complete = y_target[feature_complete_mask]
+                
+                if len(X_target_complete) > 0:
+                    # Scale features (no imputation needed)
+                    scaler = StandardScaler()
+                    X_target_scaled = scaler.fit_transform(X_target_complete)
+                    
+                    # For validation set, we need to handle missing values
+                    imputer = SimpleImputer(strategy='mean')
+                    imputer.fit(X_target_complete)
+                    X_val_imputed = imputer.transform(X_fold_val)
+                    X_val_scaled = scaler.transform(X_val_imputed)
+                    
+                    # Use target-specific alpha
+                    target_alphas = {
+                        'Tg': 10.0,
+                        'FFV': 1.0,
+                        'Tc': 10.0,
+                        'Density': 5.0,
+                        'Rg': 10.0
+                    }
+                    alpha = target_alphas.get(target, 1.0)
+                    
+                    # Train Ridge model
+                    model = Ridge(alpha=alpha, random_state=42)
+                    model.fit(X_target_scaled, y_target_complete)
+                    
+                    # Predict on validation
+                    fold_predictions[:, i] = model.predict(X_val_scaled)
+                else:
+                    # No complete samples, use median
+                    fold_predictions[:, i] = y_fold_train[target].median()
+            else:
+                # No samples available, use median
+                fold_predictions[:, i] = y_fold_train[target].median()
+        
+        # Calculate fold score (simple MAE for now)
+        fold_mae = 0
+        n_targets = 0
+        for i, target in enumerate(target_columns):
+            mask = ~y_fold_val[target].isna()
+            if mask.sum() > 0:
+                mae = np.mean(np.abs(y_fold_val[target][mask] - fold_predictions[mask, i]))
+                fold_mae += mae
+                n_targets += 1
+        
+        if n_targets > 0:
+            fold_mae /= n_targets
+            fold_scores.append(fold_mae)
+            print(f"  Fold {fold + 1} MAE: {fold_mae:.4f}")
+    
+    cv_mean = np.mean(fold_scores)
+    cv_std = np.std(fold_scores)
+    
+    print(f"\nCross-Validation MAE: {cv_mean:.4f} (+/- {cv_std:.4f})")
+    
+    return {
+        'cv_mean': cv_mean,
+        'cv_std': cv_std,
+        'fold_scores': fold_scores
+    }
+
+
+def main(cv_only=False):
     """
     Main function to train model and make predictions
+    
+    Args:
+        cv_only: If True, only run cross-validation and skip submission generation
     """
-    print("=== Baseline Ridge Regression Model ===")
+    print("=== Separate Ridge Models for Polymer Prediction ===")
     print("Loading training data...")
     
     # Load main training data
@@ -214,6 +335,12 @@ def main():
     for col in target_columns:
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
+    
+    # Run cross-validation if requested
+    if cv_only:
+        cv_results = perform_cross_validation(X_train, y_train, cv_folds=5, target_columns=target_columns)
+        print(f"\n=== Cross-Validation Complete ===")
+        return cv_results
     
     # Train separate Ridge regression models for each target
     print("\n=== Training Separate Models for Each Target ===")
@@ -302,4 +429,9 @@ def main():
     print("\n=== Model training complete! ===")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    # Check for command line arguments
+    cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
+    
+    main(cv_only=cv_only)
