@@ -242,27 +242,40 @@ def main():
             X_target = X_train[mask]
             y_target = y_train[target][mask]
             
-            # Handle missing values in features for this target's samples
-            imputer = SimpleImputer(strategy='mean')
-            X_target_imputed = imputer.fit_transform(X_target)
-            X_test_imputed = imputer.transform(X_test)
+            # Further filter to only keep rows with no missing features
+            feature_complete_mask = ~X_target.isnull().any(axis=1)
+            X_target_complete = X_target[feature_complete_mask]
+            y_target_complete = y_target[feature_complete_mask]
             
-            # Scale features
-            scaler = StandardScaler()
-            X_target_scaled = scaler.fit_transform(X_target_imputed)
-            X_test_scaled = scaler.transform(X_test_imputed)
+            print(f"  Complete samples (no missing features): {len(X_target_complete)} ({len(X_target_complete)/len(y_train)*100:.1f}%)")
             
-            # Use target-specific alpha
-            alpha = target_alphas.get(target, 1.0)
-            print(f"  Using alpha={alpha}")
-            
-            # Train Ridge model for this target
-            model = Ridge(alpha=alpha, random_state=42)
-            model.fit(X_target_scaled, y_target)
-            
-            # Make predictions
-            predictions[:, i] = model.predict(X_test_scaled)
-            print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+            if len(X_target_complete) > 0:
+                # Scale features (no imputation needed)
+                scaler = StandardScaler()
+                X_target_scaled = scaler.fit_transform(X_target_complete)
+                
+                # For test set, we need to handle missing values somehow
+                # Use mean imputation only for test set predictions
+                imputer = SimpleImputer(strategy='mean')
+                imputer.fit(X_target_complete)  # Fit on complete training data
+                X_test_imputed = imputer.transform(X_test)
+                X_test_scaled = scaler.transform(X_test_imputed)
+                
+                # Use target-specific alpha
+                alpha = target_alphas.get(target, 1.0)
+                print(f"  Using alpha={alpha}")
+                
+                # Train Ridge model for this target
+                model = Ridge(alpha=alpha, random_state=42)
+                model.fit(X_target_scaled, y_target_complete)
+                
+                # Make predictions
+                predictions[:, i] = model.predict(X_test_scaled)
+                print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+            else:
+                # No complete samples available, use median
+                predictions[:, i] = y_train[target].median()
+                print(f"  No complete samples available, using median: {predictions[:, i][0]:.4f}")
         else:
             # Use median if no samples available
             predictions[:, i] = y_train_filled[target].median()

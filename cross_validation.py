@@ -257,19 +257,45 @@ def train_separate_models(X_train, y_train, target_names, use_separate=True):
             X_target = X_train[mask]
             y_target = y_train[target][mask]
             
-            # Use target-specific alpha
-            alpha = target_alphas.get(target, 1.0)
+            # Further filter to only keep rows with no missing features
+            if isinstance(X_target, pd.DataFrame):
+                feature_complete_mask = ~X_target.isnull().any(axis=1)
+            else:
+                # For numpy arrays
+                feature_complete_mask = ~np.isnan(X_target).any(axis=1)
             
-            # Create a pipeline with imputation and scaling for this target
-            pipeline = Pipeline([
-                ('imputer', SimpleImputer(strategy='mean')),
-                ('scaler', StandardScaler()),
-                ('ridge', Ridge(alpha=alpha, random_state=42))
-            ])
+            X_target_complete = X_target[feature_complete_mask]
+            y_target_complete = y_target[feature_complete_mask]
             
-            # Fit the pipeline
-            pipeline.fit(X_target, y_target)
-            models[target] = pipeline
+            if len(X_target_complete) > 0:
+                # Use target-specific alpha
+                alpha = target_alphas.get(target, 1.0)
+                
+                # Create a pipeline that will:
+                # 1. Impute only for prediction (not training)
+                # 2. Scale based on complete data
+                # 3. Train Ridge on complete data only
+                
+                # We need a custom approach since sklearn Pipeline doesn't support this
+                # Store the components separately
+                imputer = SimpleImputer(strategy='mean')
+                imputer.fit(X_target_complete)  # Fit imputer on complete data
+                
+                scaler = StandardScaler()
+                X_scaled = scaler.fit_transform(X_target_complete)
+                
+                ridge = Ridge(alpha=alpha, random_state=42)
+                ridge.fit(X_scaled, y_target_complete)
+                
+                # Store all components
+                models[target] = {
+                    'imputer': imputer,
+                    'scaler': scaler,
+                    'ridge': ridge,
+                    'n_complete_samples': len(X_target_complete)
+                }
+            else:
+                models[target] = None
         else:
             # No samples available
             models[target] = None
@@ -298,7 +324,15 @@ def predict_with_models(models, X_test, y_train, target_names):
     
     for i, target in enumerate(target_names):
         if target in models and models[target] is not None:
-            predictions[:, i] = models[target].predict(X_test)
+            if isinstance(models[target], dict):
+                # New approach with separate components
+                # Apply imputation and scaling, then predict
+                X_test_imputed = models[target]['imputer'].transform(X_test)
+                X_test_scaled = models[target]['scaler'].transform(X_test_imputed)
+                predictions[:, i] = models[target]['ridge'].predict(X_test_scaled)
+            else:
+                # Old pipeline approach
+                predictions[:, i] = models[target].predict(X_test)
         else:
             # Use median if no model available
             predictions[:, i] = y_train[target].median()
