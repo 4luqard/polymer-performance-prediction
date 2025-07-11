@@ -18,13 +18,15 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# Import competition metric
-from src.competition_metric import neurips_polymer_metric
-
-
 # Check if running on Kaggle or locally
-import os
 IS_KAGGLE = os.path.exists('/kaggle/input')
+
+# Import competition metric only if not on Kaggle
+if not IS_KAGGLE:
+    from src.competition_metric import neurips_polymer_metric
+
+
+# Already checked above
 
 # Set paths based on environment
 if IS_KAGGLE:
@@ -171,6 +173,10 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
     Returns:
         Dictionary with CV scores
     """
+    if IS_KAGGLE:
+        print("Cross-validation is not available on Kaggle")
+        return None
+        
     from sklearn.model_selection import KFold
     
     if target_columns is None:
@@ -335,11 +341,15 @@ def main(cv_only=False):
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Run cross-validation if requested
+    # Run cross-validation if requested (but not on Kaggle)
     if cv_only:
-        cv_results = perform_cross_validation(X_train, y_train, cv_folds=5, target_columns=target_columns)
-        print(f"\n=== Cross-Validation Complete ===")
-        return cv_results
+        if IS_KAGGLE:
+            print("\n⚠️  Cross-validation is not available in Kaggle notebooks")
+            print("Proceeding with submission generation instead...")
+        else:
+            cv_results = perform_cross_validation(X_train, y_train, cv_folds=5, target_columns=target_columns)
+            print(f"\n=== Cross-Validation Complete ===")
+            return cv_results
     
     # Train separate Ridge regression models for each target
     print("\n=== Training Separate Models for Each Target ===")
