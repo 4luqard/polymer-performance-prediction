@@ -90,7 +90,7 @@ def extract_molecular_features(smiles):
     features['num_chiral_centers'] = smiles.count('@')
     
     # Polymer-specific features
-    features['has_polymer_end'] = int('*' in smiles)
+    # features['has_polymer_end'] = int('*' in smiles)  # Removed - zero importance
     # features['num_polymer_ends'] = smiles.count('*')  # Removed - may cause overfitting
     
     # Functional group patterns
