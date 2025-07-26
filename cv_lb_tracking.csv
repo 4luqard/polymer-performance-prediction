@@ -1,4 +1,0 @@
-timestamp,cv_score,lb_score,difference,ratio,notes
-2025-07-10 12:05:23,0.012,0.158,-0.146,0.0759493670886076,Baseline Ridge model
-2025-07-10 13:45:09,0.012,0.158,-0.146,0.0759493670886076,Baseline Ridge model (from Kaggle notebook)
-2025-07-11 07:41:38,0.0122,0.081,-0.0688,0.1506172839506173,Separate Ridge models for each target

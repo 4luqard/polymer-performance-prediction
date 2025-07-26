@@ -44,7 +44,7 @@ Glass transition temperature (Tg) is the temperature at which an amorphous polym
 
 ### Key Characteristics
 - Occurs over a temperature range, not at a single point
-- Only applicable to amorphous polymers (crystalline polymers don't have Tg)
+- Primarily associated with amorphous polymers, but semi-crystalline polymers also exhibit Tg (see crystallinity_analysis.md)
 - Typical values: 170-500 K (-103 to 227°C) for synthetic polymers
 
 ### Factors Affecting Tg
