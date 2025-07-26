@@ -1,6 +1,17 @@
-# Polymer Target Features - Academic Understanding
+# Polymer Properties Documentation
 
-## 1. Glass Transition Temperature (Tg)
+This document contains detailed information about the five target polymer properties in the NeurIPS 2025 Open Polymer Prediction competition.
+
+## Table of Contents
+1. [Glass Transition Temperature (Tg)](#glass-transition-temperature-tg)
+2. [Fractional Free Volume (FFV)](#fractional-free-volume-ffv)
+3. [Crystallization Temperature (Tc)](#crystallization-temperature-tc)
+4. [Density](#density)
+5. [Radius of Gyration (Rg)](#radius-of-gyration-rg)
+
+---
+
+## Glass Transition Temperature (Tg)
 
 ### Definition
 Glass transition temperature (Tg) is the temperature at which an amorphous polymer transitions from a hard, glassy state to a soft, rubbery state. This is a phenomenon specific to amorphous polymers where molecular chains transition from "frozen" immobile conformations to having liquid-like flow capabilities.
@@ -93,7 +104,9 @@ Glass transition temperature (Tg) is the temperature at which an amorphous polym
    - Midpoint of shift = Tg value
 5. **Example result**: For PVC, see step change around 80°C
 
-## 2. Fractional Free Volume (FFV)
+---
+
+## Fractional Free Volume (FFV)
 
 ### Definition
 Fractional Free Volume (FFV) is the ratio between the free volume (Vf) and the specific volume (V) of a polymer:
@@ -192,7 +205,9 @@ Think of FFV like the empty space in a jar of marbles:
 - **Loosely thrown marbles** = High FFV (like foam)
 - **Gas molecules** = Sand trying to flow through the marbles
 
-## 3. Crystallization Temperature (Tc)
+---
+
+## Crystallization Temperature (Tc)
 
 ### Definition
 Crystallization temperature (Tc) is the temperature at which a polymer transitions from an amorphous or molten state to a crystalline state. This is the temperature where polymer chains gain sufficient mobility to spontaneously arrange themselves into ordered, crystalline structures.
@@ -290,7 +305,9 @@ Tc is like making rock candy:
 - Crystallization time determines cycle
 - Faster crystallization = shorter cycles = more profit
 
-## 4. Density
+---
+
+## Density
 
 ### Definition
 Polymer density (ρ) is the mass per unit volume of a polymer material, typically expressed in g/cm³. It reflects the packing efficiency of polymer chains and is directly related to the crystalline/amorphous ratio in semi-crystalline polymers.
@@ -417,7 +434,9 @@ Polymer density (ρ) is the mass per unit volume of a polymer material, typicall
 5. **Water displaced**: 485 liters < 300 liters capacity
 6. **Result**: Won't float! Need hollow design
 
-## 5. Radius of Gyration (Rg)
+---
+
+## Radius of Gyration (Rg)
 
 ### Definition
 Radius of gyration (Rg) is the root mean square distance of all mass elements in a polymer chain from its center of mass. It represents the average size of a polymer coil in solution and provides information about molecular conformation and compactness.
