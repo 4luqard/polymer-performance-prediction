@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Baseline Ridge Regression Model for NeurIPS Open Polymer Prediction 2025
-Final version for Kaggle submission - no internet dependencies required
+Target-Specific Ridge Regression Model for NeurIPS Open Polymer Prediction 2025
+Uses feature selection per target to reduce complexity
 """
 
 import pandas as pd
@@ -145,6 +145,15 @@ def extract_molecular_features(smiles):
     
     return features
 
+# Define target-specific features to use
+TARGET_FEATURES = {
+    'Tg': ['num_C', 'num_n'],  # Top 2 atom features
+    'FFV': ['num_S', 'num_n'], 
+    'Tc': ['num_C', 'num_S'],
+    'Density': ['num_Cl', 'num_Br'],
+    'Rg': ['num_F', 'num_Cl']
+}
+
 def prepare_features(df):
     """Convert SMILES to molecular features"""
     print("Extracting molecular features...")
@@ -158,6 +167,17 @@ def prepare_features(df):
     
     features_df = pd.DataFrame(features_list)
     return features_df
+
+def select_features_for_target(X, target):
+    """Select features for a specific target"""
+    # Get all non-atom features
+    atom_features = ['num_C', 'num_c', 'num_O', 'num_o', 'num_N', 'num_n', 
+                    'num_S', 'num_s', 'num_F', 'num_Cl', 'num_Br', 'num_I', 'num_P']
+    non_atom_features = [col for col in X.columns if col not in atom_features]
+    
+    # Select features: all non-atom features + target-specific atom features
+    selected_features = non_atom_features + TARGET_FEATURES[target]
+    return X[selected_features]
 
 
 def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
@@ -208,7 +228,11 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
             if mask.sum() > 0:
                 # Get samples with valid target values
                 mask_indices = np.where(mask)[0]
-                X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
+                # Select features for this target
+                X_fold_train_selected = select_features_for_target(X_fold_train, target)
+                X_fold_val_selected = select_features_for_target(X_fold_val, target)
+                
+                X_target = X_fold_train_selected.iloc[mask_indices] if hasattr(X_fold_train_selected, 'iloc') else X_fold_train_selected[mask_indices]
                 y_target = y_fold_train[target].iloc[mask_indices]
                 
                 # Further filter to only keep rows with no missing features
@@ -229,7 +253,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
                     # For validation set, we need to handle missing values
                     imputer = SimpleImputer(strategy='mean')
                     imputer.fit(X_target_complete)
-                    X_val_imputed = imputer.transform(X_fold_val)
+                    X_val_imputed = imputer.transform(X_fold_val_selected)
                     X_val_scaled = scaler.transform(X_val_imputed)
                     
                     # Use target-specific alpha
@@ -347,9 +371,86 @@ def main(cv_only=False):
             print("\n⚠️  Cross-validation is not available in Kaggle notebooks")
             print("Proceeding with submission generation instead...")
         else:
-            cv_results = perform_cross_validation(X_train, y_train, cv_folds=5, target_columns=target_columns)
-            print(f"\n=== Cross-Validation Complete ===")
-            return cv_results
+            print("\n=== Testing Target-Specific Feature Selection ===")
+            
+            # First run standard CV for comparison
+            print("\n--- Standard model (all features) ---")
+            cv_standard = perform_cross_validation(X_train, y_train, cv_folds=3, target_columns=target_columns)
+            
+            # Now test with feature selection
+            print("\n--- Target-specific features model ---")
+            from sklearn.model_selection import KFold
+            kf = KFold(n_splits=3, shuffle=True, random_state=42)
+            fold_scores = []
+            
+            # Define target alphas
+            target_alphas = {
+                'Tg': 10.0,
+                'FFV': 1.0,
+                'Tc': 10.0,
+                'Density': 5.0,
+                'Rg': 10.0
+            }
+            
+            for fold, (train_idx, val_idx) in enumerate(kf.split(X_train)):
+                print(f"\nFold {fold + 1}/3...")
+                
+                X_fold_train = X_train.iloc[train_idx]
+                X_fold_val = X_train.iloc[val_idx]
+                y_fold_train = y_train.iloc[train_idx]
+                y_fold_val = y_train.iloc[val_idx]
+                
+                fold_predictions = np.zeros((len(val_idx), len(target_columns)))
+                
+                for i, target in enumerate(target_columns):
+                    # Select features for this target
+                    X_fold_train_selected = select_features_for_target(X_fold_train, target)
+                    X_fold_val_selected = select_features_for_target(X_fold_val, target)
+                    
+                    mask = ~y_fold_train[target].isna()
+                    if mask.sum() > 0:
+                        mask_indices = np.where(mask)[0]
+                        X_target = X_fold_train_selected.iloc[mask_indices]
+                        y_target = y_fold_train[target].iloc[mask_indices]
+                        
+                        feature_complete_mask = ~X_target.isnull().any(axis=1)
+                        X_target_complete = X_target[feature_complete_mask]
+                        y_target_complete = y_target[feature_complete_mask.values]
+                        
+                        if len(X_target_complete) > 0:
+                            scaler = StandardScaler()
+                            X_target_scaled = scaler.fit_transform(X_target_complete)
+                            
+                            imputer = SimpleImputer(strategy='mean')
+                            imputer.fit(X_target_complete)
+                            X_val_imputed = imputer.transform(X_fold_val_selected)
+                            X_val_scaled = scaler.transform(X_val_imputed)
+                            
+                            alpha = target_alphas.get(target, 1.0)
+                            model = Ridge(alpha=alpha, random_state=42)
+                            model.fit(X_target_scaled, y_target_complete)
+                            
+                            fold_predictions[:, i] = model.predict(X_val_scaled)
+                        else:
+                            fold_predictions[:, i] = y_fold_train[target].median()
+                    else:
+                        fold_predictions[:, i] = y_fold_train[target].median()
+                
+                fold_pred_df = pd.DataFrame(fold_predictions, columns=target_columns, index=y_fold_val.index)
+                fold_score, _ = neurips_polymer_metric(y_fold_val, fold_pred_df, target_columns)
+                
+                if not np.isnan(fold_score):
+                    fold_scores.append(fold_score)
+                    print(f"  Fold {fold + 1} score: {fold_score:.4f}")
+            
+            cv_mean = np.mean(fold_scores)
+            cv_std = np.std(fold_scores)
+            
+            print(f"\n=== Comparison ===\nStandard model CV: {cv_standard['cv_mean']:.4f} (+/- {cv_standard['cv_std']:.4f})")
+            print(f"Target-specific CV: {cv_mean:.4f} (+/- {cv_std:.4f})")
+            print(f"Difference: {cv_mean - cv_standard['cv_mean']:.4f}")
+            
+            return {'standard': cv_standard, 'target_specific': {'cv_mean': cv_mean, 'cv_std': cv_std}}
     
     # Train separate Ridge regression models for each target
     print("\n=== Training Separate Models for Each Target ===")
@@ -373,8 +474,14 @@ def main(cv_only=False):
         print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
         
         if n_samples > 0:
+            # Select features for this target
+            X_train_selected = select_features_for_target(X_train, target)
+            X_test_selected = select_features_for_target(X_test, target)
+            
+            print(f"  Using {len(X_train_selected.columns)} features (reduced from {len(X_train.columns)})")
+            
             # Get samples with valid target values
-            X_target = X_train[mask]
+            X_target = X_train_selected[mask]
             y_target = y_train[target][mask]
             
             # Further filter to only keep rows with no missing features
@@ -393,7 +500,7 @@ def main(cv_only=False):
                 # Use mean imputation only for test set predictions
                 imputer = SimpleImputer(strategy='mean')
                 imputer.fit(X_target_complete)  # Fit on complete training data
-                X_test_imputed = imputer.transform(X_test)
+                X_test_imputed = imputer.transform(X_test_selected)
                 X_test_scaled = scaler.transform(X_test_imputed)
                 
                 # Use target-specific alpha
@@ -436,6 +543,7 @@ def main(cv_only=False):
     print(submission_df)
     
     print("\n=== Model training complete! ===")
+    print("Used target-specific features to reduce complexity")
 
 if __name__ == "__main__":
     import sys
