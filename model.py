@@ -56,6 +56,51 @@ else:
         'data/raw/train_supplement/dataset4.csv'
     ]
 
+def count_uniform_repeats(smiles):
+    """
+    Count uniform repeating units in polymer SMILES.
+    
+    Examples:
+    - *CC(=0)NCCCCCCCC(=0)NCC(=0)N* has 1 uniform repeat (CCCCCCCC)
+    - *CC(=0)NCCCCCCCCCCCCCC(=0)NCC(=0)N* has 2 uniform repeats (multiple C sequences)
+    
+    Args:
+        smiles: SMILES string representation of polymer
+        
+    Returns:
+        int: Count of uniform repeating sequences
+    """
+    # Find all sequences of consecutive identical atoms/groups
+    count = 0
+    
+    # Pattern to find consecutive C atoms (most common repeating unit)
+    c_pattern = r'C{4,}'  # 4 or more consecutive C atoms
+    c_matches = re.findall(c_pattern, smiles)
+    count += len(c_matches)
+    
+    # Pattern for other common repeating units
+    # Consecutive methylenes in parentheses: (CH2){n}
+    ch2_pattern = r'\(CH2\){2,}'
+    ch2_matches = re.findall(ch2_pattern, smiles)
+    count += len(ch2_matches)
+    
+    # Pattern for aromatic repeats
+    aromatic_pattern = r'c{4,}'  # 4 or more consecutive aromatic carbons
+    aromatic_matches = re.findall(aromatic_pattern, smiles)
+    count += len(aromatic_matches)
+    
+    # Pattern for oxygen repeats (like in PEG)
+    o_pattern = r'(?:CO){3,}|(?:OC){3,}'  # Repeating CO or OC units
+    o_matches = re.findall(o_pattern, smiles)
+    count += len(o_matches)
+    
+    # Pattern for other atom repeats
+    n_pattern = r'N{3,}'  # 3 or more consecutive N atoms
+    n_matches = re.findall(n_pattern, smiles)
+    count += len(n_matches)
+    
+    return count
+
 def extract_molecular_features(smiles):
     """Extract features from SMILES string without external libraries"""
     features = {}
@@ -142,6 +187,9 @@ def extract_molecular_features(smiles):
     features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
     features['has_spiro'] = int('@' in smiles and smiles.count('@') > 1)
     features['has_bridge'] = int(bool(re.search(r'[0-9].*[0-9]', smiles)))
+    
+    # Uniform repeat unit counting for crystallinity prediction
+    features['uniform_repeat_count'] = count_uniform_repeats(smiles)
     
     return features
 
