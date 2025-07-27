@@ -6,7 +6,10 @@ This file contains all tests for local development and validation.
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Add parent directory to path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
 
 import pandas as pd
 import numpy as np
@@ -20,7 +23,6 @@ warnings.filterwarnings('ignore')
 
 # Import functions from model.py
 from model import extract_molecular_features, prepare_features, perform_cross_validation
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.competition_metric import neurips_polymer_metric, display_metric_results
 
 # Local paths for testing

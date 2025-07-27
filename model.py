@@ -155,6 +155,113 @@ def prepare_features(df):
     return features_df
 
 
+def perform_cross_validation(X, y, model, cv_folds=5):
+    """
+    Perform cross-validation using a single Ridge model for all targets.
+    
+    This implementation:
+    1. Uses K-fold cross validation on the training data
+    2. Trains a single MultiOutputRegressor with Ridge for all targets
+    3. Uses a weighted average alpha based on target sparsity
+    4. Returns RMSE scores for each target
+    
+    Parameters:
+    -----------
+    X : numpy array
+        Feature matrix (already scaled/imputed)
+    y : pandas DataFrame
+        Target values with columns ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    model : sklearn estimator (not used, kept for compatibility)
+        Model to use (we'll create our own Ridge with weighted alpha)
+    cv_folds : int
+        Number of cross-validation folds
+    
+    Returns:
+    --------
+    dict : Dictionary with target names as keys and score dictionaries as values
+           Each score dict contains 'mean_rmse', 'std_rmse', and 'all_scores'
+    """
+    from sklearn.model_selection import KFold
+    
+    print(f"\nPerforming {cv_folds}-fold cross-validation...")
+    
+    # Target columns
+    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    
+    # Calculate weighted alpha based on target sparsity
+    base_alphas = {
+        'Tg': 10.0,      # Higher regularization for sparse target
+        'FFV': 1.0,      # Lower regularization for dense target
+        'Tc': 10.0,      # Higher regularization for sparse target
+        'Density': 5.0,  # Medium regularization
+        'Rg': 10.0       # Higher regularization for sparse target
+    }
+    
+    # Calculate weighted average alpha based on non-missing samples
+    total_samples = 0
+    weighted_alpha = 0
+    for target in target_columns:
+        if target in y.columns:
+            n_samples = (~y[target].isna()).sum()
+            total_samples += n_samples
+            weighted_alpha += base_alphas.get(target, 5.0) * n_samples
+    
+    avg_alpha = weighted_alpha / total_samples if total_samples > 0 else 5.0
+    print(f"Using weighted average alpha: {avg_alpha:.3f}")
+    
+    # Initialize results
+    cv_results = {target: {'all_scores': [], 'mean_rmse': np.nan, 'std_rmse': np.nan} 
+                  for target in target_columns}
+    
+    # Create KFold splitter
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    
+    # Fill missing values in y for training
+    y_filled = y.fillna(y.median())
+    
+    # Perform cross-validation
+    for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X)):
+        print(f"\nFold {fold_idx + 1}/{cv_folds}")
+        
+        # Split data
+        X_train_fold = X[train_idx]
+        X_val_fold = X[val_idx]
+        y_train_fold = y_filled.iloc[train_idx]
+        y_val_fold = y.iloc[val_idx]  # Use original y for validation (with NaN)
+        
+        # Train single Ridge model with MultiOutputRegressor
+        ridge_model = MultiOutputRegressor(Ridge(alpha=avg_alpha, random_state=42))
+        ridge_model.fit(X_train_fold, y_train_fold)
+        
+        # Make predictions
+        y_pred = ridge_model.predict(X_val_fold)
+        
+        # Calculate RMSE for each target
+        for i, target in enumerate(target_columns):
+            if target in y.columns:
+                # Get non-missing validation samples for this target
+                mask = ~y_val_fold[target].isna()
+                if mask.sum() > 0:
+                    y_true = y_val_fold[target][mask].values
+                    y_pred_target = y_pred[mask, i]
+                    
+                    # Calculate RMSE
+                    rmse = np.sqrt(mean_squared_error(y_true, y_pred_target))
+                    cv_results[target]['all_scores'].append(rmse)
+                    print(f"  {target}: RMSE = {rmse:.4f} (n={mask.sum()})")
+    
+    # Calculate mean and std for each target
+    for target in target_columns:
+        if target in y.columns and len(cv_results[target]['all_scores']) > 0:
+            scores = np.array(cv_results[target]['all_scores'])
+            cv_results[target]['mean_rmse'] = scores.mean()
+            cv_results[target]['std_rmse'] = scores.std()
+            print(f"\n{target} - Mean RMSE: {cv_results[target]['mean_rmse']:.4f} "
+                  f"(+/- {cv_results[target]['std_rmse']:.4f})")
+    
+    return cv_results
+
+
 def main():
     """
     Main function to train model and make predictions
