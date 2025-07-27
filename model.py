@@ -462,12 +462,13 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
     }
 
 
-def main(cv_only=False):
+def main(cv_only=False, use_supplementary=True):
     """
     Main function to train model and make predictions
     
     Args:
         cv_only: If True, only run cross-validation and skip submission generation
+        use_supplementary: If True, include supplementary datasets in training
     """
     print("=== Separate Ridge Models for Polymer Prediction ===")
     print("Loading training data...")
@@ -476,21 +477,24 @@ def main(cv_only=False):
     train_df = pd.read_csv(TRAIN_PATH)
     print(f"Main training data shape: {train_df.shape}")
     
-    # Load and combine supplementary datasets
-    print("\nLoading supplementary datasets...")
-    all_train_dfs = [train_df]
-    
-    for supp_path in SUPP_PATHS:
-        try:
-            supp_df = pd.read_csv(supp_path)
-            print(f"Loaded {supp_path}: {supp_df.shape}")
-            all_train_dfs.append(supp_df)
-        except Exception as e:
-            print(f"Could not load {supp_path}: {e}")
-    
-    # Combine all training data
-    train_df = pd.concat(all_train_dfs, ignore_index=True)
-    print(f"\nCombined training data shape: {train_df.shape}")
+    if use_supplementary:
+        # Load and combine supplementary datasets
+        print("\nLoading supplementary datasets...")
+        all_train_dfs = [train_df]
+        
+        for supp_path in SUPP_PATHS:
+            try:
+                supp_df = pd.read_csv(supp_path)
+                print(f"Loaded {supp_path}: {supp_df.shape}")
+                all_train_dfs.append(supp_df)
+            except Exception as e:
+                print(f"Could not load {supp_path}: {e}")
+        
+        # Combine all training data
+        train_df = pd.concat(all_train_dfs, ignore_index=True)
+        print(f"\nCombined training data shape: {train_df.shape}")
+    else:
+        print("\n** Using ONLY main training data (no supplementary datasets) **")
     
     # Load test data
     print("\nLoading test data...")
@@ -532,6 +536,10 @@ def main(cv_only=False):
             print("Proceeding with submission generation instead...")
         else:
             print("\n=== Testing with Multiple Random Seeds ===")
+            if not use_supplementary:
+                print("** Running CV WITHOUT supplementary datasets **")
+            else:
+                print("** Running CV WITH supplementary datasets **")
             
             # Run multi-seed CV with target-specific features (current implementation)
             multi_seed_result = perform_multi_seed_cv(X_train, y_train, cv_folds=5, 
@@ -653,6 +661,7 @@ if __name__ == "__main__":
     # Check for command line arguments
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
     multiple_cv = '--multiple-cv' in sys.argv
+    no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
     
     if multiple_cv and not IS_KAGGLE:
         # Run multiple CV runs for robust results
@@ -664,12 +673,13 @@ if __name__ == "__main__":
         train_df = pd.read_csv(TRAIN_PATH)
         all_train_dfs = [train_df]
         
-        for supp_path in SUPP_PATHS:
-            try:
-                supp_df = pd.read_csv(supp_path)
-                all_train_dfs.append(supp_df)
-            except:
-                pass
+        if not no_supplement:
+            for supp_path in SUPP_PATHS:
+                try:
+                    supp_df = pd.read_csv(supp_path)
+                    all_train_dfs.append(supp_df)
+                except:
+                    pass
         
         combined_train = pd.concat(all_train_dfs, ignore_index=True)
         target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
@@ -683,4 +693,4 @@ if __name__ == "__main__":
         n_runs = int(sys.argv[sys.argv.index('--multiple-cv') + 1]) if len(sys.argv) > sys.argv.index('--multiple-cv') + 1 else 5
         run_cv_multiple_times(perform_cross_validation, X_features, y_train, n_runs=n_runs)
     else:
-        main(cv_only=cv_only)
+        main(cv_only=cv_only, use_supplementary=not no_supplement)
