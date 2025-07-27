@@ -225,12 +225,23 @@ def main():
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Train separate Ridge regression models for each target
-    print("\n=== Training Separate Models for Each Target ===")
-    predictions = np.zeros((len(X_test_scaled), len(target_columns)))
+    # Train single Ridge regression model with all targets
+    print("\n=== Training Single Ridge Model for All Targets ===")
     
-    # Try different alpha values for each target
-    target_alphas = {
+    # Note: scikit-learn's Ridge doesn't support per-output alpha values directly
+    # So we'll use a weighted average alpha based on the missing data patterns
+    # This maintains similar regularization strength while using a single model
+    
+    # Calculate weighted alpha based on sparsity of each target
+    target_sparsity = {}
+    for target in target_columns:
+        missing_ratio = y_train[target].isna().sum() / len(y_train)
+        target_sparsity[target] = missing_ratio
+        print(f"{target} missing ratio: {missing_ratio:.3f}")
+    
+    # Use higher alpha for targets with more missing data
+    # Weight by number of available samples for each target
+    base_alphas = {
         'Tg': 10.0,      # Higher regularization for sparse target
         'FFV': 1.0,      # Lower regularization for dense target
         'Tc': 10.0,      # Higher regularization for sparse target
@@ -238,34 +249,27 @@ def main():
         'Rg': 10.0       # Higher regularization for sparse target
     }
     
+    # Calculate weighted average alpha
+    total_samples = 0
+    weighted_alpha = 0
+    for target in target_columns:
+        n_samples = (~y_train[target].isna()).sum()
+        total_samples += n_samples
+        weighted_alpha += base_alphas[target] * n_samples
+    
+    avg_alpha = weighted_alpha / total_samples if total_samples > 0 else 5.0
+    print(f"\nUsing weighted average alpha: {avg_alpha:.3f}")
+    
+    # Train single Ridge model with MultiOutputRegressor
+    model = MultiOutputRegressor(Ridge(alpha=avg_alpha, random_state=42))
+    model.fit(X_train_scaled, y_train_filled)
+    
+    # Make predictions
+    predictions = model.predict(X_test_scaled)
+    
+    print("\nPrediction statistics:")
     for i, target in enumerate(target_columns):
-        print(f"\nTraining model for {target}...")
-        
-        # Get non-missing samples for this target
-        mask = ~y_train[target].isna()
-        n_samples = mask.sum()
-        print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
-        
-        if n_samples > 0:
-            # Train on samples with valid target values
-            X_target = X_train_scaled[mask]
-            y_target = y_train[target][mask]
-            
-            # Use target-specific alpha
-            alpha = target_alphas.get(target, 1.0)
-            print(f"  Using alpha={alpha}")
-            
-            # Train Ridge model for this target
-            model = Ridge(alpha=alpha, random_state=42)
-            model.fit(X_target, y_target)
-            
-            # Make predictions
-            predictions[:, i] = model.predict(X_test_scaled)
-            print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
-        else:
-            # Use median if no samples available
-            predictions[:, i] = y_train_filled[target].median()
-            print(f"  No samples available, using median: {predictions[:, i][0]:.4f}")
+        print(f"  {target}: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
     
     # Create submission DataFrame
     submission_df = pd.DataFrame({
