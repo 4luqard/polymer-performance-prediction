@@ -227,7 +227,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
                     X_target_scaled = scaler.fit_transform(X_target_complete)
                     
                     # For validation set, we need to handle missing values
-                    imputer = SimpleImputer(strategy='mean')
+                    imputer = SimpleImputer(strategy='constant', fill_value=0)
                     imputer.fit(X_target_complete)
                     X_val_imputed = imputer.transform(X_fold_val)
                     X_val_scaled = scaler.transform(X_val_imputed)
@@ -390,8 +390,8 @@ def main(cv_only=False):
                 X_target_scaled = scaler.fit_transform(X_target_complete)
                 
                 # For test set, we need to handle missing values somehow
-                # Use mean imputation only for test set predictions
-                imputer = SimpleImputer(strategy='mean')
+                # Use zero imputation only for test set predictions
+                imputer = SimpleImputer(strategy='constant', fill_value=0)
                 imputer.fit(X_target_complete)  # Fit on complete training data
                 X_test_imputed = imputer.transform(X_test)
                 X_test_scaled = scaler.transform(X_test_imputed)
