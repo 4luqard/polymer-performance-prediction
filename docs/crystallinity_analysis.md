@@ -65,7 +65,7 @@ The feature counts sequences of uniform repeating units in the polymer SMILES:
 #### Performance Impact
 - **Previous model CV score**: 0.0670 (+/- 0.0035)
 - **With uniform repeat count**: 0.0662 (+/- 0.0034)
-- **Improvement**: 0.0008 (1.2% relative improvement)
+- **Score decrease**: 0.0008 (lower is better - 1.2% relative improvement)
 
 This confirms that chain regularity, as measured by uniform repeat sequences, is indeed predictive of polymer properties, particularly for Tg which relates to crystallinity.
 
