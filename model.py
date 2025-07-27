@@ -63,20 +63,11 @@ def extract_molecular_features(smiles):
     # Basic string features
     features['length'] = len(smiles)
     
-    # Count different atoms (case-sensitive for aromatic vs non-aromatic)
+    # Count only most important atoms (reduced for complexity)
     features['num_C'] = len(re.findall(r'C', smiles))
     features['num_c'] = len(re.findall(r'c', smiles))  # aromatic carbon
     features['num_O'] = len(re.findall(r'O', smiles))
-    features['num_o'] = len(re.findall(r'o', smiles))  # aromatic oxygen
     features['num_N'] = len(re.findall(r'N', smiles))
-    features['num_n'] = len(re.findall(r'n', smiles))  # aromatic nitrogen
-    features['num_S'] = len(re.findall(r'S', smiles))
-    features['num_s'] = len(re.findall(r's', smiles))  # aromatic sulfur
-    features['num_F'] = smiles.count('F')
-    features['num_Cl'] = smiles.count('Cl')
-    features['num_Br'] = smiles.count('Br')
-    features['num_I'] = smiles.count('I')
-    features['num_P'] = smiles.count('P')
     
     # Count bonds
     features['num_single_bonds'] = smiles.count('-')
@@ -90,7 +81,7 @@ def extract_molecular_features(smiles):
     features['num_chiral_centers'] = smiles.count('@')
     
     # Polymer-specific features
-    features['has_polymer_end'] = int('*' in smiles)
+    # features['has_polymer_end'] = int('*' in smiles)  # Removed - reduce complexity
     # features['num_polymer_ends'] = smiles.count('*')  # Removed - may cause overfitting
     
     # Functional group patterns
@@ -103,24 +94,14 @@ def extract_molecular_features(smiles):
     features['has_amide'] = int('C(=O)N' in smiles or 'CON' in smiles)
     
     # Aromatic features
-    features['num_aromatic_atoms'] = features['num_c'] + features['num_n'] + features['num_o'] + features['num_s']
+    features['num_aromatic_atoms'] = features['num_c']
     features['aromatic_ratio'] = features['num_aromatic_atoms'] / max(features['length'], 1)
     
     # Calculate derived features
     features['heavy_atom_count'] = (features['num_C'] + features['num_c'] + 
-                                   features['num_O'] + features['num_o'] + 
-                                   features['num_N'] + features['num_n'] + 
-                                   features['num_S'] + features['num_s'] + 
-                                   features['num_F'] + features['num_Cl'] + 
-                                   features['num_Br'] + features['num_I'] + 
-                                   features['num_P'])
+                                   features['num_O'] + features['num_N'])
     
-    features['heteroatom_count'] = (features['num_O'] + features['num_o'] + 
-                                    features['num_N'] + features['num_n'] + 
-                                    features['num_S'] + features['num_s'] + 
-                                    features['num_F'] + features['num_Cl'] + 
-                                    features['num_Br'] + features['num_I'] + 
-                                    features['num_P'])
+    features['heteroatom_count'] = (features['num_O'] + features['num_N'])
     
     features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
     
