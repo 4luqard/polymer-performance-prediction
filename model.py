@@ -24,6 +24,7 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 # Import competition metric only if not on Kaggle
 if not IS_KAGGLE:
     from src.competition_metric import neurips_polymer_metric
+    from utils.diagnostics import CVDiagnostics
 
 
 # Already checked above
@@ -180,7 +181,7 @@ def select_features_for_target(X, target):
     return X[selected_features]
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True):
     """
     Perform cross-validation for separate models approach
     
@@ -189,6 +190,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
         y: Targets (DataFrame with multiple columns)
         cv_folds: Number of cross-validation folds
         target_columns: List of target column names
+        enable_diagnostics: Enable diagnostic tracking
     
     Returns:
         Dictionary with CV scores
@@ -204,6 +206,13 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
     
     print(f"\n=== Cross-Validation ({cv_folds} folds) ===")
     
+    # Initialize diagnostics if enabled
+    cv_diagnostics = None
+    if enable_diagnostics:
+        cv_diagnostics = CVDiagnostics()
+        # Track initial feature statistics
+        cv_diagnostics.track_feature_statistics(X)
+    
     kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
     
     # Store scores for each fold and target
@@ -216,6 +225,10 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
         X_fold_val = X.iloc[val_idx] if hasattr(X, 'iloc') else X[val_idx]
         y_fold_train = y.iloc[train_idx]
         y_fold_val = y.iloc[val_idx]
+        
+        # Track data split if diagnostics enabled
+        if cv_diagnostics:
+            cv_diagnostics.track_data_split(fold, train_idx, val_idx, y_fold_train, y_fold_val)
         
         # Predictions for this fold
         fold_predictions = np.zeros((len(val_idx), len(target_columns)))
@@ -266,12 +279,34 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
                     }
                     alpha = target_alphas.get(target, 1.0)
                     
+                    # Track target training if diagnostics enabled
+                    if cv_diagnostics:
+                        features_used = list(X_fold_train_selected.columns) if hasattr(X_fold_train_selected, 'columns') else [f'feature_{j}' for j in range(X_fold_train_selected.shape[1])]
+                        val_mask = ~y_fold_val[target].isna()
+                        cv_diagnostics.track_target_training(
+                            fold, target, 
+                            len(X_target_complete), 
+                            val_mask.sum(),
+                            features_used, 
+                            alpha
+                        )
+                    
                     # Train Ridge model
                     model = Ridge(alpha=alpha, random_state=42)
                     model.fit(X_target_scaled, y_target_complete)
                     
                     # Predict on validation
                     fold_predictions[:, i] = model.predict(X_val_scaled)
+                    
+                    # Track predictions if diagnostics enabled
+                    if cv_diagnostics and val_mask.sum() > 0:
+                        val_indices_with_target = val_idx[val_mask]
+                        cv_diagnostics.track_predictions(
+                            fold, target,
+                            val_indices_with_target,
+                            fold_predictions[val_mask, i],
+                            y_fold_val[target][val_mask].values
+                        )
                 else:
                     # No complete samples, use median
                     fold_predictions[:, i] = y_fold_train[target].median()
@@ -289,11 +324,21 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
         if not np.isnan(fold_score):
             fold_scores.append(fold_score)
             print(f"  Fold {fold + 1} competition score: {fold_score:.4f}")
+            
+            # Track fold score if diagnostics enabled
+            if cv_diagnostics:
+                cv_diagnostics.track_fold_score(fold, fold_score, individual_scores)
     
     cv_mean = np.mean(fold_scores)
     cv_std = np.std(fold_scores)
     
     print(f"\nCross-Validation Score (Competition Metric): {cv_mean:.4f} (+/- {cv_std:.4f})")
+    
+    # Finalize diagnostics if enabled
+    if cv_diagnostics:
+        cv_diagnostics.finalize_session(cv_mean, cv_std, fold_scores)
+        report = cv_diagnostics.generate_summary_report()
+        print("\n" + report)
     
     return {
         'cv_mean': cv_mean,
@@ -550,5 +595,35 @@ if __name__ == "__main__":
     
     # Check for command line arguments
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
+    multiple_cv = '--multiple-cv' in sys.argv
     
-    main(cv_only=cv_only)
+    if multiple_cv and not IS_KAGGLE:
+        # Run multiple CV runs for robust results
+        from utils.cv_runner import run_cv_multiple_times
+        
+        print("=== Running Multiple CV Runs ===")
+        
+        # Load and prepare data as in main()
+        train_df = pd.read_csv(TRAIN_PATH)
+        all_train_dfs = [train_df]
+        
+        for supp_path in SUPP_PATHS:
+            try:
+                supp_df = pd.read_csv(supp_path)
+                all_train_dfs.append(supp_df)
+            except:
+                pass
+        
+        combined_train = pd.concat(all_train_dfs, ignore_index=True)
+        target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+        feature_columns = [col for col in combined_train.columns if col not in ['id'] + target_columns]
+        
+        X_train = combined_train[feature_columns]
+        y_train = combined_train[target_columns]
+        X_features = extract_features(X_train['SMILES'])
+        
+        # Run multiple CV
+        n_runs = int(sys.argv[sys.argv.index('--multiple-cv') + 1]) if len(sys.argv) > sys.argv.index('--multiple-cv') + 1 else 5
+        run_cv_multiple_times(perform_cross_validation, X_features, y_train, n_runs=n_runs)
+    else:
+        main(cv_only=cv_only)
