@@ -263,11 +263,28 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     scaler = StandardScaler()
                     X_target_scaled = scaler.fit_transform(X_target_complete)
                     
-                    # For validation set, we need to handle missing values
-                    imputer = SimpleImputer(strategy='constant', fill_value=0)
-                    imputer.fit(X_target_complete)
-                    X_val_imputed = imputer.transform(X_fold_val_selected)
-                    X_val_scaled = scaler.transform(X_val_imputed)
+                    # For validation set, apply same filtering as training
+                    # Only evaluate on samples with non-missing target values
+                    val_mask = ~y_fold_val[target].isna()
+                    val_mask_indices = np.where(val_mask)[0]
+                    X_val_complete = None
+                    val_complete_indices = np.array([])
+                    
+                    if len(val_mask_indices) > 0:
+                        X_val_target = X_fold_val_selected.iloc[val_mask_indices] if hasattr(X_fold_val_selected, 'iloc') else X_fold_val_selected[val_mask_indices]
+                        
+                        # Further filter to only keep rows with no missing features
+                        if isinstance(X_val_target, pd.DataFrame):
+                            val_feature_complete_mask = ~X_val_target.isnull().any(axis=1)
+                        else:
+                            val_feature_complete_mask = ~np.isnan(X_val_target).any(axis=1)
+                        
+                        X_val_complete = X_val_target[val_feature_complete_mask]
+                        val_complete_indices = val_mask_indices[val_feature_complete_mask]
+                        
+                        if len(X_val_complete) > 0:
+                            # Scale validation features
+                            X_val_scaled = scaler.transform(X_val_complete)
                     
                     # Use target-specific alpha
                     target_alphas = {
@@ -279,33 +296,38 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     }
                     alpha = target_alphas.get(target, 1.0)
                     
-                    # Track target training if diagnostics enabled
-                    if cv_diagnostics:
-                        features_used = list(X_fold_train_selected.columns) if hasattr(X_fold_train_selected, 'columns') else [f'feature_{j}' for j in range(X_fold_train_selected.shape[1])]
-                        val_mask = ~y_fold_val[target].isna()
-                        cv_diagnostics.track_target_training(
-                            fold, target, 
-                            len(X_target_complete), 
-                            val_mask.sum(),
-                            features_used, 
-                            alpha
-                        )
-                    
                     # Train Ridge model
                     model = Ridge(alpha=alpha, random_state=42)
                     model.fit(X_target_scaled, y_target_complete)
                     
-                    # Predict on validation
-                    fold_predictions[:, i] = model.predict(X_val_scaled)
+                    # Initialize predictions with median for all samples
+                    fold_predictions[:, i] = y_fold_train[target].median()
+                    
+                    # Make predictions only for validation samples with complete features
+                    if len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
+                        predictions = model.predict(X_val_scaled)
+                        # Map predictions back to original validation indices
+                        for idx, pred in zip(val_complete_indices, predictions):
+                            fold_predictions[idx, i] = pred
+                    
+                    # Track target training if diagnostics enabled
+                    if cv_diagnostics:
+                        features_used = list(X_fold_train_selected.columns) if hasattr(X_fold_train_selected, 'columns') else [f'feature_{j}' for j in range(X_fold_train_selected.shape[1])]
+                        cv_diagnostics.track_target_training(
+                            fold, target, 
+                            len(X_target_complete), 
+                            len(X_val_complete) if len(val_mask_indices) > 0 and X_val_complete is not None else 0,
+                            features_used, 
+                            alpha
+                        )
                     
                     # Track predictions if diagnostics enabled
-                    if cv_diagnostics and val_mask.sum() > 0:
-                        val_indices_with_target = val_idx[val_mask]
+                    if cv_diagnostics and len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
                         cv_diagnostics.track_predictions(
                             fold, target,
-                            val_indices_with_target,
-                            fold_predictions[val_mask, i],
-                            y_fold_val[target][val_mask].values
+                            val_idx[val_complete_indices],
+                            fold_predictions[val_complete_indices, i],
+                            y_fold_val[target].iloc[val_complete_indices].values
                         )
                 else:
                     # No complete samples, use median
