@@ -18,17 +18,22 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
-
 # Check if running on Kaggle or locally
-import os
 IS_KAGGLE = os.path.exists('/kaggle/input')
+
+# Import competition metric only if not on Kaggle
+if not IS_KAGGLE:
+    from src.competition_metric import neurips_polymer_metric
+
+
+# Already checked above
 
 # Set paths based on environment
 if IS_KAGGLE:
     # Kaggle competition paths
     TRAIN_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/train.csv'
     TEST_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/test.csv'
-    SUBMISSION_PATH = '/kaggle/working/submission.csv'
+    SUBMISSION_PATH = 'submission.csv'
     
     # Supplementary dataset paths
     SUPP_PATHS = [
@@ -155,118 +160,132 @@ def prepare_features(df):
     return features_df
 
 
-def perform_cross_validation(X, y, model, cv_folds=5):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None):
     """
-    Perform cross-validation using a single Ridge model for all targets.
+    Perform cross-validation for separate models approach
     
-    This implementation:
-    1. Uses K-fold cross validation on the training data
-    2. Trains a single MultiOutputRegressor with Ridge for all targets
-    3. Uses a weighted average alpha based on target sparsity
-    4. Returns RMSE scores for each target
-    
-    Parameters:
-    -----------
-    X : numpy array
-        Feature matrix (already scaled/imputed)
-    y : pandas DataFrame
-        Target values with columns ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
-    model : sklearn estimator (not used, kept for compatibility)
-        Model to use (we'll create our own Ridge with weighted alpha)
-    cv_folds : int
-        Number of cross-validation folds
+    Args:
+        X: Features (numpy array or DataFrame)
+        y: Targets (DataFrame with multiple columns)
+        cv_folds: Number of cross-validation folds
+        target_columns: List of target column names
     
     Returns:
-    --------
-    dict : Dictionary with target names as keys and score dictionaries as values
-           Each score dict contains 'mean_rmse', 'std_rmse', and 'all_scores'
+        Dictionary with CV scores
     """
+    if IS_KAGGLE:
+        print("Cross-validation is not available on Kaggle")
+        return None
+        
     from sklearn.model_selection import KFold
     
-    print(f"\nPerforming {cv_folds}-fold cross-validation...")
+    if target_columns is None:
+        target_columns = y.columns.tolist()
     
-    # Target columns
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    print(f"\n=== Cross-Validation ({cv_folds} folds) ===")
     
-    # Calculate weighted alpha based on target sparsity
-    base_alphas = {
-        'Tg': 10.0,      # Higher regularization for sparse target
-        'FFV': 1.0,      # Lower regularization for dense target
-        'Tc': 10.0,      # Higher regularization for sparse target
-        'Density': 5.0,  # Medium regularization
-        'Rg': 10.0       # Higher regularization for sparse target
-    }
-    
-    # Calculate weighted average alpha based on non-missing samples
-    total_samples = 0
-    weighted_alpha = 0
-    for target in target_columns:
-        if target in y.columns:
-            n_samples = (~y[target].isna()).sum()
-            total_samples += n_samples
-            weighted_alpha += base_alphas.get(target, 5.0) * n_samples
-    
-    avg_alpha = weighted_alpha / total_samples if total_samples > 0 else 5.0
-    print(f"Using weighted average alpha: {avg_alpha:.3f}")
-    
-    # Initialize results
-    cv_results = {target: {'all_scores': [], 'mean_rmse': np.nan, 'std_rmse': np.nan} 
-                  for target in target_columns}
-    
-    # Create KFold splitter
     kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
     
-    # Fill missing values in y for training
-    y_filled = y.fillna(y.median())
+    # Store scores for each fold and target
+    fold_scores = []
     
-    # Perform cross-validation
-    for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X)):
-        print(f"\nFold {fold_idx + 1}/{cv_folds}")
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
+        print(f"\nFold {fold + 1}/{cv_folds}...")
         
-        # Split data
-        X_train_fold = X[train_idx]
-        X_val_fold = X[val_idx]
-        y_train_fold = y_filled.iloc[train_idx]
-        y_val_fold = y.iloc[val_idx]  # Use original y for validation (with NaN)
+        X_fold_train = X.iloc[train_idx] if hasattr(X, 'iloc') else X[train_idx]
+        X_fold_val = X.iloc[val_idx] if hasattr(X, 'iloc') else X[val_idx]
+        y_fold_train = y.iloc[train_idx]
+        y_fold_val = y.iloc[val_idx]
         
-        # Train single Ridge model with MultiOutputRegressor
-        ridge_model = MultiOutputRegressor(Ridge(alpha=avg_alpha, random_state=42))
-        ridge_model.fit(X_train_fold, y_train_fold)
+        # Predictions for this fold
+        fold_predictions = np.zeros((len(val_idx), len(target_columns)))
         
-        # Make predictions
-        y_pred = ridge_model.predict(X_val_fold)
-        
-        # Calculate RMSE for each target
+        # Train separate models for each target
         for i, target in enumerate(target_columns):
-            if target in y.columns:
-                # Get non-missing validation samples for this target
-                mask = ~y_val_fold[target].isna()
-                if mask.sum() > 0:
-                    y_true = y_val_fold[target][mask].values
-                    y_pred_target = y_pred[mask, i]
+            # Get non-missing samples for this target
+            mask = ~y_fold_train[target].isna()
+            
+            if mask.sum() > 0:
+                # Get samples with valid target values
+                mask_indices = np.where(mask)[0]
+                X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
+                y_target = y_fold_train[target].iloc[mask_indices]
+                
+                # Further filter to only keep rows with no missing features
+                if isinstance(X_target, pd.DataFrame):
+                    feature_complete_mask = ~X_target.isnull().any(axis=1)
+                else:
+                    # For numpy arrays
+                    feature_complete_mask = ~np.isnan(X_target).any(axis=1)
+                
+                X_target_complete = X_target[feature_complete_mask]
+                y_target_complete = y_target[feature_complete_mask]
+                
+                if len(X_target_complete) > 0:
+                    # Scale features (no imputation needed)
+                    scaler = StandardScaler()
+                    X_target_scaled = scaler.fit_transform(X_target_complete)
                     
-                    # Calculate RMSE
-                    rmse = np.sqrt(mean_squared_error(y_true, y_pred_target))
-                    cv_results[target]['all_scores'].append(rmse)
-                    print(f"  {target}: RMSE = {rmse:.4f} (n={mask.sum()})")
+                    # For validation set, we need to handle missing values
+                    imputer = SimpleImputer(strategy='mean')
+                    imputer.fit(X_target_complete)
+                    X_val_imputed = imputer.transform(X_fold_val)
+                    X_val_scaled = scaler.transform(X_val_imputed)
+                    
+                    # Use target-specific alpha
+                    target_alphas = {
+                        'Tg': 10.0,
+                        'FFV': 1.0,
+                        'Tc': 10.0,
+                        'Density': 5.0,
+                        'Rg': 10.0
+                    }
+                    alpha = target_alphas.get(target, 1.0)
+                    
+                    # Train Ridge model
+                    model = Ridge(alpha=alpha, random_state=42)
+                    model.fit(X_target_scaled, y_target_complete)
+                    
+                    # Predict on validation
+                    fold_predictions[:, i] = model.predict(X_val_scaled)
+                else:
+                    # No complete samples, use median
+                    fold_predictions[:, i] = y_fold_train[target].median()
+            else:
+                # No samples available, use median
+                fold_predictions[:, i] = y_fold_train[target].median()
+        
+        # Calculate fold score using competition metric
+        # Create predictions DataFrame with proper column names and index
+        fold_pred_df = pd.DataFrame(fold_predictions, columns=target_columns, index=y_fold_val.index)
+        
+        # Calculate competition metric
+        fold_score, individual_scores = neurips_polymer_metric(y_fold_val, fold_pred_df, target_columns)
+        
+        if not np.isnan(fold_score):
+            fold_scores.append(fold_score)
+            print(f"  Fold {fold + 1} competition score: {fold_score:.4f}")
     
-    # Calculate mean and std for each target
-    for target in target_columns:
-        if target in y.columns and len(cv_results[target]['all_scores']) > 0:
-            scores = np.array(cv_results[target]['all_scores'])
-            cv_results[target]['mean_rmse'] = scores.mean()
-            cv_results[target]['std_rmse'] = scores.std()
-            print(f"\n{target} - Mean RMSE: {cv_results[target]['mean_rmse']:.4f} "
-                  f"(+/- {cv_results[target]['std_rmse']:.4f})")
+    cv_mean = np.mean(fold_scores)
+    cv_std = np.std(fold_scores)
     
-    return cv_results
+    print(f"\nCross-Validation Score (Competition Metric): {cv_mean:.4f} (+/- {cv_std:.4f})")
+    
+    return {
+        'cv_mean': cv_mean,
+        'cv_std': cv_std,
+        'fold_scores': fold_scores
+    }
 
 
-def main():
+def main(cv_only=False):
     """
     Main function to train model and make predictions
+    
+    Args:
+        cv_only: If True, only run cross-validation and skip submission generation
     """
-    print("=== Baseline Ridge Regression Model ===")
+    print("=== Separate Ridge Models for Polymer Prediction ===")
     print("Loading training data...")
     
     # Load main training data
@@ -310,21 +329,11 @@ def main():
     print(f"Training samples: {X_train.shape[0]}")
     print(f"Test samples: {X_test.shape[0]}")
     
-    # Handle missing values in features
-    print("\nHandling missing values...")
-    imputer = SimpleImputer(strategy='mean')
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_test_imputed = imputer.transform(X_test)
+    # We'll handle missing values and scaling per target
+    print("\nPreparing for target-specific training...")
     
-    # Scale features
-    print("Scaling features...")
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_imputed)
-    X_test_scaled = scaler.transform(X_test_imputed)
-    
-    # Handle missing values in targets
-    print("Handling missing target values...")
-    y_train_filled = y_train.fillna(y_train.median())
+    # We don't need to handle missing target values since we train separate models
+    # Each model will only use samples with valid values for its specific target
     
     # Print target statistics
     print("\nTarget value statistics:")
@@ -332,23 +341,22 @@ def main():
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Train single Ridge regression model with all targets
-    print("\n=== Training Single Ridge Model for All Targets ===")
+    # Run cross-validation if requested (but not on Kaggle)
+    if cv_only:
+        if IS_KAGGLE:
+            print("\n⚠️  Cross-validation is not available in Kaggle notebooks")
+            print("Proceeding with submission generation instead...")
+        else:
+            cv_results = perform_cross_validation(X_train, y_train, cv_folds=5, target_columns=target_columns)
+            print(f"\n=== Cross-Validation Complete ===")
+            return cv_results
     
-    # Note: scikit-learn's Ridge doesn't support per-output alpha values directly
-    # So we'll use a weighted average alpha based on the missing data patterns
-    # This maintains similar regularization strength while using a single model
+    # Train separate Ridge regression models for each target
+    print("\n=== Training Separate Models for Each Target ===")
+    predictions = np.zeros((len(X_test), len(target_columns)))
     
-    # Calculate weighted alpha based on sparsity of each target
-    target_sparsity = {}
-    for target in target_columns:
-        missing_ratio = y_train[target].isna().sum() / len(y_train)
-        target_sparsity[target] = missing_ratio
-        print(f"{target} missing ratio: {missing_ratio:.3f}")
-    
-    # Use higher alpha for targets with more missing data
-    # Weight by number of available samples for each target
-    base_alphas = {
+    # Try different alpha values for each target
+    target_alphas = {
         'Tg': 10.0,      # Higher regularization for sparse target
         'FFV': 1.0,      # Lower regularization for dense target
         'Tc': 10.0,      # Higher regularization for sparse target
@@ -356,27 +364,57 @@ def main():
         'Rg': 10.0       # Higher regularization for sparse target
     }
     
-    # Calculate weighted average alpha
-    total_samples = 0
-    weighted_alpha = 0
-    for target in target_columns:
-        n_samples = (~y_train[target].isna()).sum()
-        total_samples += n_samples
-        weighted_alpha += base_alphas[target] * n_samples
-    
-    avg_alpha = weighted_alpha / total_samples if total_samples > 0 else 5.0
-    print(f"\nUsing weighted average alpha: {avg_alpha:.3f}")
-    
-    # Train single Ridge model with MultiOutputRegressor
-    model = MultiOutputRegressor(Ridge(alpha=avg_alpha, random_state=42))
-    model.fit(X_train_scaled, y_train_filled)
-    
-    # Make predictions
-    predictions = model.predict(X_test_scaled)
-    
-    print("\nPrediction statistics:")
     for i, target in enumerate(target_columns):
-        print(f"  {target}: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+        print(f"\nTraining model for {target}...")
+        
+        # Get non-missing samples for this target
+        mask = ~y_train[target].isna()
+        n_samples = mask.sum()
+        print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
+        
+        if n_samples > 0:
+            # Get samples with valid target values
+            X_target = X_train[mask]
+            y_target = y_train[target][mask]
+            
+            # Further filter to only keep rows with no missing features
+            feature_complete_mask = ~X_target.isnull().any(axis=1)
+            X_target_complete = X_target[feature_complete_mask]
+            y_target_complete = y_target[feature_complete_mask]
+            
+            print(f"  Complete samples (no missing features): {len(X_target_complete)} ({len(X_target_complete)/len(y_train)*100:.1f}%)")
+            
+            if len(X_target_complete) > 0:
+                # Scale features (no imputation needed)
+                scaler = StandardScaler()
+                X_target_scaled = scaler.fit_transform(X_target_complete)
+                
+                # For test set, we need to handle missing values somehow
+                # Use mean imputation only for test set predictions
+                imputer = SimpleImputer(strategy='mean')
+                imputer.fit(X_target_complete)  # Fit on complete training data
+                X_test_imputed = imputer.transform(X_test)
+                X_test_scaled = scaler.transform(X_test_imputed)
+                
+                # Use target-specific alpha
+                alpha = target_alphas.get(target, 1.0)
+                print(f"  Using alpha={alpha}")
+                
+                # Train Ridge model for this target
+                model = Ridge(alpha=alpha, random_state=42)
+                model.fit(X_target_scaled, y_target_complete)
+                
+                # Make predictions
+                predictions[:, i] = model.predict(X_test_scaled)
+                print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+            else:
+                # No complete samples available, use median
+                predictions[:, i] = y_train[target].median()
+                print(f"  No complete samples available, using median: {predictions[:, i][0]:.4f}")
+        else:
+            # Use median of available values if no samples
+            predictions[:, i] = y_train[target].median()
+            print(f"  No samples available, using median: {predictions[:, i][0]:.4f}")
     
     # Create submission DataFrame
     submission_df = pd.DataFrame({
@@ -400,4 +438,9 @@ def main():
     print("\n=== Model training complete! ===")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    # Check for command line arguments
+    cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
+    
+    main(cv_only=cv_only)
