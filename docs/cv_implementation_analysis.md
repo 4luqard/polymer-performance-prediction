@@ -246,3 +246,92 @@ After deeper analysis, the issue is **data source contamination**:
 1. **Use only main training data for CV**: Remove supplementary datasets from CV
 2. **Train separate models**: One for main data, separate for supplementary
 3. **Weighted ensemble**: Combine predictions based on data quality
+
+## Update: Diagnostic Tracking Results (2025-07-27)
+
+### New Diagnostic System Implementation
+
+We've implemented a comprehensive CV diagnostic tracking system that captures:
+- Fold-wise data splits and missing patterns
+- Target-specific training details (sample sizes, features used, alpha values)
+- Individual predictions and errors
+- Detailed performance metrics
+
+### Key Findings from Diagnostic Run
+
+#### 1. **Sample Size Consistency**
+- Train sizes vary slightly: [11308, 11309, 11309] - minor inconsistency
+- Each fold maintains proportional target representation
+- Actual training samples per target per fold:
+  - **Tg**: ~365-381 samples (3.2-3.4% of fold)
+  - **FFV**: ~5215-5286 samples (46.1-46.8% of fold)
+  - **Tc**: ~491-492 samples (4.3-4.4% of fold)
+  - **Density**: ~401-413 samples (3.5-3.7% of fold)
+  - **Rg**: ~403-414 samples (3.6-3.7% of fold)
+
+#### 2. **Missing Data Patterns Are Consistent**
+The diagnostic tracking confirms consistent missing patterns across folds:
+- **Tg**: 96.7% missing across all folds
+- **FFV**: 53.5% missing across all folds
+- **Tc**: 95.7% missing across all folds
+- **Density**: 96.4% missing across all folds
+- **Rg**: 96.4% missing across all folds
+
+#### 3. **CV Score Stability**
+- Fold scores: [0.0656, 0.0681, 0.0709]
+- Mean: 0.0682 (±0.0022)
+- Low standard deviation indicates stable performance
+- No extreme outliers or fold-specific issues detected
+
+#### 4. **Feature Usage Confirmation**
+All targets consistently use 31 features:
+- 29 non-atom features (structural features)
+- 2 target-specific atom count features
+
+### New Issues Discovered
+
+#### 1. **Imputation Application Timing**
+The diagnostic tracking revealed that imputation is applied to the ENTIRE validation set before filtering for specific targets. This means:
+- Imputation statistics are based on training data with non-missing targets
+- But applied to validation data that includes samples with missing targets
+- This could introduce bias when the test set has different missing patterns
+
+#### 2. **Validation Sample Sizes**
+Validation sample counts for each target:
+- **Tg**: ~176-192 samples per fold
+- **FFV**: ~2606-2677 samples per fold  
+- **Tc**: ~245-246 samples per fold
+- **Density**: ~200-212 samples per fold
+- **Rg**: ~200-211 samples per fold
+
+These are proportional to training sizes, confirming proper stratification.
+
+### Updated Recommendations
+
+Based on the diagnostic findings:
+
+1. **Imputation Strategy Revision**:
+   - Apply imputation AFTER filtering for target-specific samples
+   - Or maintain separate imputers for different missing patterns
+
+2. **Sample Size Monitoring**:
+   - Add minimum sample size thresholds
+   - Log warnings when targets have <100 training samples per fold
+
+3. **Multiple CV Runs**:
+   - Implement multiple CV runs with different seeds
+   - Current single-seed CV may not capture full variance
+
+4. **Per-Target Analysis**:
+   - Track individual target CV scores
+   - Identify which targets drive the overall score
+
+### Diagnostic Tracking Benefits
+
+The new diagnostic system provides:
+- **JSON output**: Complete tracking data for further analysis
+- **Visualizations**: Fold score distributions, missing patterns, sample sizes
+- **Summary reports**: Automated issue detection and warnings
+- **Reproducibility**: Session-based tracking with timestamps
+
+This enhanced visibility helps identify subtle issues that standard CV reporting misses.
