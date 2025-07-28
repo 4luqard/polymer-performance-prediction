@@ -380,37 +380,6 @@ if __name__ == "__main__":
     
     # Check for command line arguments
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
-    multiple_cv = '--multiple-cv' in sys.argv
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
     
-    if multiple_cv and not IS_KAGGLE:
-        # Run multiple CV runs for robust results
-        from utils.cv_runner import run_cv_multiple_times
-        
-        print("=== Running Multiple CV Runs ===")
-        
-        # Load and prepare data as in main()
-        train_df = pd.read_csv(TRAIN_PATH)
-        all_train_dfs = [train_df]
-        
-        if not no_supplement:
-            for supp_path in SUPP_PATHS:
-                try:
-                    supp_df = pd.read_csv(supp_path)
-                    all_train_dfs.append(supp_df)
-                except:
-                    pass
-        
-        combined_train = pd.concat(all_train_dfs, ignore_index=True)
-        target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
-        feature_columns = [col for col in combined_train.columns if col not in ['id'] + target_columns]
-        
-        X_train = combined_train[feature_columns]
-        y_train = combined_train[target_columns]
-        X_features = extract_features(X_train['SMILES'])
-        
-        # Run multiple CV
-        n_runs = int(sys.argv[sys.argv.index('--multiple-cv') + 1]) if len(sys.argv) > sys.argv.index('--multiple-cv') + 1 else 5
-        run_cv_multiple_times(perform_cross_validation, X_features, y_train, n_runs=n_runs)
-    else:
-        main(cv_only=cv_only, use_supplementary=not no_supplement)
+    main(cv_only=cv_only, use_supplementary=not no_supplement)
