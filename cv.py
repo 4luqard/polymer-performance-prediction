@@ -143,15 +143,19 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                             )
                         
                         # Store predictions
-                        relative_indices = [np.where(val_idx == idx)[0][0] for idx in val_complete_indices if idx in val_idx]
-                        fold_predictions[relative_indices, i] = y_pred_target
+                        # Map val_complete_indices to positions in val_idx
+                        for j, idx in enumerate(val_complete_indices):
+                            position_in_val = np.where(val_idx == idx)[0]
+                            if len(position_in_val) > 0:
+                                fold_predictions[position_in_val[0], i] = y_pred_target[j]
                         
                         # Calculate and store target-specific scores
-                        target_score = mean_squared_error(
+                        # Calculate RMSE manually to avoid version issues
+                        mse = mean_squared_error(
                             y_fold_val[target].iloc[val_complete_indices], 
-                            y_pred_target, 
-                            squared=False
+                            y_pred_target
                         )
+                        target_score = np.sqrt(mse)
                         target_fold_scores[target].append(target_score)
                         
                         print(f"  {target}: {len(X_target_complete)} train, {len(X_val_complete)} val samples, RMSE = {target_score:.4f}")
@@ -164,7 +168,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         
         # Calculate fold score using competition metric
         # Create DataFrame with predictions
-        fold_pred_df = pd.DataFrame(fold_predictions, columns=target_columns)
+        fold_pred_df = pd.DataFrame(fold_predictions, columns=target_columns, index=val_idx)
         
         # Add fold predictions and true values if diagnostics enabled
         if cv_diagnostics:
@@ -175,9 +179,11 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         
         # Calculate competition metric for this fold
         fold_score = neurips_polymer_metric(y_val_true, fold_pred_df)
-        fold_scores.append(fold_score)
+        # Extract scalar value from tuple
+        fold_score_value = fold_score[0] if isinstance(fold_score, tuple) else fold_score
+        fold_scores.append(fold_score_value)
         
-        print(f"\nFold {fold + 1} Score: {fold_score:.4f}")
+        print(f"\nFold {fold + 1} Score: {fold_score_value:.4f}")
     
     # Calculate overall CV score
     cv_mean = np.mean(fold_scores)
