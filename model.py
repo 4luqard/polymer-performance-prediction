@@ -217,6 +217,20 @@ def select_features_for_target(X, target):
                     'num_S', 'num_s', 'num_F', 'num_Cl', 'num_Br', 'num_I', 'num_P']
     non_atom_features = [col for col in X.columns if col not in atom_features]
     
+    # Optimal molecular weight feature configuration per target
+    # Based on extensive CV testing of all combinations
+    mol_weight_config = {
+        'Tg': [],  # Use both features
+        'FFV': ['molecular_weight'],  # Exclude molecular_weight, keep mol_weight_per_heavy_atom
+        'Tc': [],  # Use both features
+        'Density': ['molecular_weight'],  # Exclude molecular_weight, keep mol_weight_per_heavy_atom
+        'Rg': ['molecular_weight', 'mol_weight_per_heavy_atom']  # Exclude both
+    }
+    
+    # Remove excluded molecular weight features for this target
+    exclude_features = mol_weight_config.get(target, [])
+    non_atom_features = [col for col in non_atom_features if col not in exclude_features]
+    
     # Select features: all non-atom features + target-specific atom features
     selected_features = non_atom_features + TARGET_FEATURES[target]
     return X[selected_features]
