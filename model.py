@@ -134,6 +134,46 @@ def extract_molecular_features(smiles):
     features['molecular_complexity'] = (features['num_rings'] + features['num_branches'] + 
                                        features['num_chiral_centers'])
     
+    # Molecular weight estimation (for Tg prediction based on Newton's second law)
+    # Atomic weights with 0.1 significance as requested
+    atomic_weights = {
+        'C': 12.0, 'c': 12.0,  # Carbon
+        'O': 16.0, 'o': 16.0,  # Oxygen
+        'N': 14.0, 'n': 14.0,  # Nitrogen
+        'S': 32.1, 's': 32.1,  # Sulfur
+        'F': 19.0,             # Fluorine
+        'Cl': 35.5,            # Chlorine
+        'Br': 79.9,            # Bromine
+        'I': 126.9,            # Iodine
+        'P': 31.0,             # Phosphorus
+        'H': 1.0               # Hydrogen (implicit)
+    }
+    
+    # Calculate molecular weight estimate
+    mol_weight = 0.0
+    mol_weight += features['num_C'] * atomic_weights['C']
+    mol_weight += features['num_c'] * atomic_weights['c']
+    mol_weight += features['num_O'] * atomic_weights['O']
+    mol_weight += features['num_o'] * atomic_weights['o']
+    mol_weight += features['num_N'] * atomic_weights['N']
+    mol_weight += features['num_n'] * atomic_weights['n']
+    mol_weight += features['num_S'] * atomic_weights['S']
+    mol_weight += features['num_s'] * atomic_weights['s']
+    mol_weight += features['num_F'] * atomic_weights['F']
+    mol_weight += features['num_Cl'] * atomic_weights['Cl']
+    mol_weight += features['num_Br'] * atomic_weights['Br']
+    mol_weight += features['num_I'] * atomic_weights['I']
+    mol_weight += features['num_P'] * atomic_weights['P']
+    
+    # Estimate hydrogen count (rough approximation)
+    # Each carbon typically has 2-3 hydrogens, adjusted for bonds
+    estimated_H = max(0, features['num_C'] * 2 - features['num_double_bonds'] - features['num_triple_bonds'] * 2)
+    mol_weight += estimated_H * atomic_weights['H']
+    
+    # Round to 0.1 significance
+    features['molecular_weight'] = round(mol_weight, 1)
+    features['mol_weight_per_heavy_atom'] = round(mol_weight / max(features['heavy_atom_count'], 1), 1)
+    
     # Additional polymer-specific patterns
     features['has_phenyl'] = int('c1ccccc1' in smiles or 'c1ccc' in smiles)
     features['has_cyclohexyl'] = int('C1CCCCC1' in smiles)
