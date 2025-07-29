@@ -165,14 +165,9 @@ def extract_molecular_features(smiles):
     mol_weight += features['num_I'] * atomic_weights['I']
     mol_weight += features['num_P'] * atomic_weights['P']
     
-    # Estimate hydrogen count (rough approximation)
-    # Each carbon typically has 2-3 hydrogens, adjusted for bonds
-    estimated_H = max(0, features['num_C'] * 2 - features['num_double_bonds'] - features['num_triple_bonds'] * 2)
-    mol_weight += estimated_H * atomic_weights['H']
-    
     # Round to 0.1 significance
-    features['molecular_weight'] = round(mol_weight, 1)
-    features['mol_weight_per_heavy_atom'] = round(mol_weight / max(features['heavy_atom_count'], 1), 1)
+    # Commented out for now - works better with non-linear models
+    # features['molecular_weight'] = round(mol_weight, 1)
     
     # Additional polymer-specific patterns
     features['has_phenyl'] = int('c1ccccc1' in smiles or 'c1ccc' in smiles)
@@ -217,19 +212,7 @@ def select_features_for_target(X, target):
                     'num_S', 'num_s', 'num_F', 'num_Cl', 'num_Br', 'num_I', 'num_P']
     non_atom_features = [col for col in X.columns if col not in atom_features]
     
-    # Optimal molecular weight feature configuration per target
-    # Based on extensive CV testing of all combinations
-    mol_weight_config = {
-        'Tg': [],  # Use both features
-        'FFV': ['molecular_weight'],  # Exclude molecular_weight, keep mol_weight_per_heavy_atom
-        'Tc': [],  # Use both features
-        'Density': ['molecular_weight'],  # Exclude molecular_weight, keep mol_weight_per_heavy_atom
-        'Rg': ['molecular_weight', 'mol_weight_per_heavy_atom']  # Exclude both
-    }
-    
-    # Remove excluded molecular weight features for this target
-    exclude_features = mol_weight_config.get(target, [])
-    non_atom_features = [col for col in non_atom_features if col not in exclude_features]
+    # Since molecular_weight is commented out, no need to exclude features
     
     # Select features: all non-atom features + target-specific atom features
     selected_features = non_atom_features + TARGET_FEATURES[target]
