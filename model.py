@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Target-Specific Ridge Regression Model for NeurIPS Open Polymer Prediction 2025
-Uses feature selection per target to reduce complexity
+Target-Specific LightGBM Model for NeurIPS Open Polymer Prediction 2025
+Uses non-linear gradient boosting to better capture polymer property relationships
 """
 
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import mean_squared_error, r2_score
+import lightgbm as lgb
 import re
 import sys
 import os
@@ -166,8 +166,7 @@ def extract_molecular_features(smiles):
     mol_weight += features['num_P'] * atomic_weights['P']
     
     # Round to 0.1 significance
-    # Commented out for now - works better with non-linear models
-    # features['molecular_weight'] = round(mol_weight, 1)
+    features['molecular_weight'] = round(mol_weight, 1)
     
     # Additional polymer-specific patterns
     features['has_phenyl'] = int('c1ccccc1' in smiles or 'c1ccc' in smiles)
@@ -319,17 +318,24 @@ def main(cv_only=False, use_supplementary=True):
                 'multi_seed': multi_seed_result
             }
     
-    # Train separate Ridge regression models for each target
-    print("\n=== Training Separate Models for Each Target ===")
+    # Train separate LightGBM models for each target
+    print("\n=== Training Separate LightGBM Models for Each Target ===")
     predictions = np.zeros((len(X_test), len(target_columns)))
     
-    # Try different alpha values for each target
-    target_alphas = {
-        'Tg': 10.0,      # Higher regularization for sparse target
-        'FFV': 1.0,      # Lower regularization for dense target
-        'Tc': 10.0,      # Higher regularization for sparse target
-        'Density': 5.0,  # Medium regularization
-        'Rg': 10.0       # Higher regularization for sparse target
+    # LightGBM parameters as requested
+    lgb_params = {
+        'objective': 'regression',
+        'metric': 'rmse',
+        'boosting_type': 'gbdt',
+        'max_depth': -1,  # No limit
+        'num_leaves': 31,
+        'n_estimators': 200,
+        'learning_rate': 0.1,
+        'feature_fraction': 0.9,
+        'bagging_fraction': 0.8,
+        'bagging_freq': 5,
+        'verbose': -1,
+        'random_state': 42
     }
     
     for i, target in enumerate(target_columns):
@@ -370,12 +376,8 @@ def main(cv_only=False, use_supplementary=True):
                 X_test_imputed = imputer.transform(X_test_selected)
                 X_test_scaled = scaler.transform(X_test_imputed)
                 
-                # Use target-specific alpha
-                alpha = target_alphas.get(target, 1.0)
-                print(f"  Using alpha={alpha}")
-                
-                # Train Ridge model for this target
-                model = Ridge(alpha=alpha, random_state=42)
+                # Train LightGBM model for this target
+                model = lgb.LGBMRegressor(**lgb_params)
                 model.fit(X_target_scaled, y_target_complete)
                 
                 # Make predictions
