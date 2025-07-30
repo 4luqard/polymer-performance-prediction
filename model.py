@@ -6,6 +6,7 @@ Uses non-linear gradient boosting to better capture polymer property relationshi
 
 import pandas as pd
 import numpy as np
+from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
@@ -218,15 +219,16 @@ def select_features_for_target(X, target):
     return X[selected_features]
 
 
-def main(cv_only=False, use_supplementary=True):
+def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     """
     Main function to train model and make predictions
     
     Args:
         cv_only: If True, only run cross-validation and skip submission generation
         use_supplementary: If True, include supplementary datasets in training
+        model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
     """
-    print("=== Separate Ridge Models for Polymer Prediction ===")
+    print(f"=== Separate {model_type.upper()} Models for Polymer Prediction ===")
     print("Loading training data...")
     
     # Load main training data
@@ -300,14 +302,16 @@ def main(cv_only=False, use_supplementary=True):
             # Run multi-seed CV with target-specific features (current implementation)
             multi_seed_result = perform_multi_seed_cv(X_train, y_train, cv_folds=5, 
                                                      target_columns=target_columns,
-                                                     enable_diagnostics=True)
+                                                     enable_diagnostics=True,
+                                                     model_type=model_type)
             
             # Also run single seed CV for comparison if needed
             print("\n=== Single Seed Comparison ===")
             single_seed_result = perform_cross_validation(X_train, y_train, cv_folds=5,
                                                          target_columns=target_columns,
                                                          enable_diagnostics=False,
-                                                         random_seed=42)
+                                                         random_seed=42,
+                                                         model_type=model_type)
             
             print(f"\n=== Final Comparison ===")
             print(f"Single seed (42) CV: {single_seed_result['cv_mean']:.4f} (+/- {single_seed_result['cv_std']:.4f})")
@@ -318,25 +322,36 @@ def main(cv_only=False, use_supplementary=True):
                 'multi_seed': multi_seed_result
             }
     
-    # Train separate LightGBM models for each target
-    print("\n=== Training Separate LightGBM Models for Each Target ===")
+    # Train separate models for each target
+    print(f"\n=== Training Separate {model_type.upper()} Models for Each Target ===")
     predictions = np.zeros((len(X_test), len(target_columns)))
     
-    # LightGBM parameters as requested
-    lgb_params = {
-        'objective': 'regression',
-        'metric': 'rmse',
-        'boosting_type': 'gbdt',
-        'max_depth': -1,  # No limit
-        'num_leaves': 31,
-        'n_estimators': 200,
-        'learning_rate': 0.1,
-        'feature_fraction': 0.9,
-        'bagging_fraction': 0.8,
-        'bagging_freq': 5,
-        'verbose': -1,
-        'random_state': 42
-    }
+    # Model parameters
+    if model_type == 'lightgbm':
+        # LightGBM parameters as requested
+        lgb_params = {
+            'objective': 'regression',
+            'metric': 'rmse',
+            'boosting_type': 'gbdt',
+            'max_depth': -1,  # No limit
+            'num_leaves': 31,
+            'n_estimators': 200,
+            'learning_rate': 0.1,
+            'feature_fraction': 0.9,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 5,
+            'verbose': -1,
+            'random_state': 42
+        }
+    else:
+        # Ridge parameters
+        target_alphas = {
+            'Tg': 10.0,      # Higher regularization for sparse target
+            'FFV': 1.0,      # Lower regularization for dense target
+            'Tc': 10.0,      # Higher regularization for sparse target
+            'Density': 5.0,  # Medium regularization
+            'Rg': 10.0       # Higher regularization for sparse target
+        }
     
     for i, target in enumerate(target_columns):
         print(f"\nTraining model for {target}...")
@@ -376,8 +391,15 @@ def main(cv_only=False, use_supplementary=True):
                 X_test_imputed = imputer.transform(X_test_selected)
                 X_test_scaled = scaler.transform(X_test_imputed)
                 
-                # Train LightGBM model for this target
-                model = lgb.LGBMRegressor(**lgb_params)
+                # Train model for this target
+                if model_type == 'lightgbm':
+                    model = lgb.LGBMRegressor(**lgb_params)
+                else:
+                    # Use Ridge with target-specific alpha
+                    alpha = target_alphas.get(target, 1.0)
+                    print(f"  Using alpha={alpha}")
+                    model = Ridge(alpha=alpha, random_state=42)
+                
                 model.fit(X_target_scaled, y_target_complete)
                 
                 # Make predictions
