@@ -19,7 +19,7 @@ from src.competition_metric import neurips_polymer_metric
 from utils.diagnostics import CVDiagnostics
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm'):
     """
     Perform cross-validation for separate models approach
     
@@ -30,6 +30,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         target_columns: List of target column names
         enable_diagnostics: Enable diagnostic tracking
         random_seed: Random seed for reproducibility
+        model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
     
     Returns:
         Dictionary with CV scores
@@ -123,24 +124,36 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                             # Scale validation features
                             X_val_scaled = scaler.transform(X_val_complete)
                     
-                    # LightGBM parameters as requested
-                    lgb_params = {
-                        'objective': 'regression',
-                        'metric': 'rmse',
-                        'boosting_type': 'gbdt',
-                        'max_depth': -1,  # No limit
-                        'num_leaves': 31,
-                        'n_estimators': 200,
-                        'learning_rate': 0.1,
-                        'feature_fraction': 0.9,
-                        'bagging_fraction': 0.8,
-                        'bagging_freq': 5,
-                        'verbose': -1,
-                        'random_state': random_seed
-                    }
+                    # Train model based on type
+                    if model_type == 'lightgbm':
+                        # LightGBM parameters as requested
+                        lgb_params = {
+                            'objective': 'regression',
+                            'metric': 'rmse',
+                            'boosting_type': 'gbdt',
+                            'max_depth': -1,  # No limit
+                            'num_leaves': 31,
+                            'n_estimators': 200,
+                            'learning_rate': 0.1,
+                            'feature_fraction': 0.9,
+                            'bagging_fraction': 0.8,
+                            'bagging_freq': 5,
+                            'verbose': -1,
+                            'random_state': random_seed
+                        }
+                        model = lgb.LGBMRegressor(**lgb_params)
+                    else:
+                        # Ridge model with target-specific alpha
+                        target_alphas = {
+                            'Tg': 10.0,
+                            'FFV': 1.0,
+                            'Tc': 10.0,
+                            'Density': 5.0,
+                            'Rg': 10.0
+                        }
+                        alpha = target_alphas.get(target, 1.0)
+                        model = Ridge(alpha=alpha, random_state=random_seed)
                     
-                    # Train LightGBM model
-                    model = lgb.LGBMRegressor(**lgb_params)
                     model.fit(X_target_scaled, y_target_complete)
                     
                     # Initialize predictions with median for all samples
@@ -156,12 +169,14 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     # Track target training if diagnostics enabled
                     if cv_diagnostics:
                         features_used = list(X_fold_train_selected.columns) if hasattr(X_fold_train_selected, 'columns') else [f'feature_{j}' for j in range(X_fold_train_selected.shape[1])]
+                        # Pass alpha value for diagnostics (use 1.0 for LightGBM as placeholder)
+                        alpha_for_diagnostics = alpha if model_type == 'ridge' else 1.0
                         cv_diagnostics.track_target_training(
                             fold, target, 
                             len(X_target_complete), 
                             len(X_val_complete) if len(val_mask_indices) > 0 and X_val_complete is not None else 0,
                             features_used, 
-                            f"LightGBM(leaves={lgb_params['num_leaves']}, n_est={lgb_params['n_estimators']})"
+                            alpha_for_diagnostics
                         )
                     
                     # Track predictions if diagnostics enabled
@@ -229,7 +244,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     }
 
 
-def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True):
+def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm'):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -241,6 +256,7 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
         enable_diagnostics: Enable diagnostic tracking
         seeds: List of random seeds to use (default: [42, 123, 456])
         per_target_analysis: Whether to perform per-target analysis
+        model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
     
     Returns:
         Dictionary with aggregated CV scores across all seeds
@@ -263,7 +279,8 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
         result = perform_cross_validation(X, y, cv_folds=cv_folds, 
                                         target_columns=target_columns, 
                                         enable_diagnostics=enable_diagnostics,
-                                        random_seed=seed)
+                                        random_seed=seed,
+                                        model_type=model_type)
         
         if result is not None:
             seed_results[seed] = result
