@@ -344,10 +344,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 'bagging_fraction': 0.8,
                 'bagging_freq': 5,
                 'verbose': -1,
-                'random_state': 42,
-                'n_iter_no_change': 50,
-                'validation_fraction': 0.15,
-                'tol': 0.001
+                'random_state': 42
             }
         else:
             lgb_params = LIGHTGBM_PARAMS.copy()
