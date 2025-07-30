@@ -1,0 +1,53 @@
+LightGBM Final Tree for Tg
+============================================================
+
+Training samples: 557
+Number of features: 32
+Total trees in ensemble: 200
+
+Top 5 Most Important Features:
+  - heteroatom_ratio: 409.00
+  - molecular_weight: 392.00
+  - aromatic_ratio: 368.00
+  - num_C: 326.00
+  - length: 267.00
+
+Final Tree Structure (Tree 199):
+========================================
+
+IF chain_length_estimate <= 1.7661:
+  IF has_sulfone <= 0.0000:
+    IF num_double_bonds <= 0.0000:
+      IF molecular_complexity <= 0.4782:
+        IF num_C <= -0.6058:
+          IF molecular_complexity <= -0.5095:
+            ... (tree continues)
+          ELSE (molecular_complexity > -0.5095):
+            ... (tree continues)
+        ELSE (num_C > -0.6058):
+          IF num_C <= 0.1864:
+            ... (tree continues)
+          ELSE (num_C > 0.1864):
+            ... (tree continues)
+      ELSE (molecular_complexity > 0.4782):
+        → Prediction: -0.5827
+    ELSE (num_double_bonds > 0.0000):
+      IF num_single_bonds <= 0.0000:
+        IF num_aromatic_atoms <= 0.4813:
+          IF num_C <= 0.4505:
+            ... (tree continues)
+          ELSE (num_C > 0.4505):
+            ... (tree continues)
+        ELSE (num_aromatic_atoms > 0.4813):
+          → Prediction: -0.4597
+      ELSE (num_single_bonds > 0.0000):
+        → Prediction: 0.7611
+  ELSE (has_sulfone > 0.0000):
+    → Prediction: -0.4989
+ELSE (chain_length_estimate > 1.7661):
+  → Prediction: 0.4697
+
+========================================
+Note: This is the final tree (200th) in the ensemble.
+The actual prediction is the sum of all 200 trees.
+Tree is truncated at depth 5 for readability.

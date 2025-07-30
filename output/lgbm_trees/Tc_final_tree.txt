@@ -1,0 +1,65 @@
+LightGBM Final Tree for Tc
+============================================================
+
+Training samples: 737
+Number of features: 32
+Total trees in ensemble: 200
+
+Top 5 Most Important Features:
+  - molecular_weight: 635.00
+  - heteroatom_ratio: 593.00
+  - chain_length_estimate: 583.00
+  - length: 556.00
+  - num_C: 398.00
+
+Final Tree Structure (Tree 199):
+========================================
+
+IF aromatic_ratio <= 1.8831:
+  IF aromatic_ratio <= 1.1320:
+    IF num_rings <= 0.0000:
+      IF heteroatom_ratio <= -0.3621:
+        IF chain_length_estimate <= 0.6752:
+          IF chain_length_estimate <= -0.8443:
+            ... (tree continues)
+          ELSE (chain_length_estimate > -0.8443):
+            ... (tree continues)
+        ELSE (chain_length_estimate > 0.6752):
+          → Prediction: 0.0006
+      ELSE (heteroatom_ratio > -0.3621):
+        IF length <= 0.6804:
+          IF has_ether <= 0.0000:
+            ... (tree continues)
+          ELSE (has_ether > 0.0000):
+            ... (tree continues)
+        ELSE (length > 0.6804):
+          → Prediction: -0.0007
+    ELSE (num_rings > 0.0000):
+      IF heteroatom_ratio <= -0.3621:
+        IF chain_length_estimate <= 0.5064:
+          → Prediction: -0.0008
+        ELSE (chain_length_estimate > 0.5064):
+          → Prediction: -0.0002
+      ELSE (heteroatom_ratio > -0.3621):
+        IF has_phenyl <= 0.0000:
+          → Prediction: 0.0004
+        ELSE (has_phenyl > 0.0000):
+          IF molecular_weight <= -0.2616:
+            ... (tree continues)
+          ELSE (molecular_weight > -0.2616):
+            ... (tree continues)
+  ELSE (aromatic_ratio > 1.1320):
+    IF heteroatom_ratio <= -0.7878:
+      → Prediction: 0.0007
+    ELSE (heteroatom_ratio > -0.7878):
+      IF num_double_bonds <= -0.5831:
+        → Prediction: -0.0005
+      ELSE (num_double_bonds > -0.5831):
+        → Prediction: 0.0004
+ELSE (aromatic_ratio > 1.8831):
+  → Prediction: -0.0005
+
+========================================
+Note: This is the final tree (200th) in the ensemble.
+The actual prediction is the sum of all 200 trees.
+Tree is truncated at depth 5 for readability.

@@ -1,0 +1,41 @@
+LightGBM Final Tree for Density
+============================================================
+
+Training samples: 613
+Number of features: 32
+Total trees in ensemble: 200
+
+Top 5 Most Important Features:
+  - heteroatom_ratio: 695.00
+  - molecular_weight: 516.00
+  - length: 403.00
+  - chain_length_estimate: 379.00
+  - heavy_atom_count: 264.00
+
+Final Tree Structure (Tree 199):
+========================================
+
+IF num_branches <= 1.5290:
+  IF heavy_atom_count <= -1.2030:
+    → Prediction: 0.0008
+  ELSE (heavy_atom_count > -1.2030):
+    IF molecular_weight <= -1.0184:
+      → Prediction: -0.0008
+    ELSE (molecular_weight > -1.0184):
+      IF chain_length_estimate <= -1.1453:
+        → Prediction: 0.0007
+      ELSE (chain_length_estimate > -1.1453):
+        IF heavy_atom_count <= -0.8661:
+          → Prediction: 0.0005
+        ELSE (heavy_atom_count > -0.8661):
+          IF heavy_atom_count <= -0.6977:
+            ... (tree continues)
+          ELSE (heavy_atom_count > -0.6977):
+            ... (tree continues)
+ELSE (num_branches > 1.5290):
+  → Prediction: -0.0012
+
+========================================
+Note: This is the final tree (200th) in the ensemble.
+The actual prediction is the sum of all 200 trees.
+Tree is truncated at depth 5 for readability.
