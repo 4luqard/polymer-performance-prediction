@@ -14,9 +14,5 @@ LIGHTGBM_PARAMS = {
     'bagging_fraction': 0.8,
     'bagging_freq': 5,
     'verbose': -1,
-    'random_state': 42,
-    # Early stopping parameters
-    'n_iter_no_change': 50,  # Stop if no improvement for 50 iterations
-    'validation_fraction': 0.15,  # Use 15% of data for validation
-    'tol': 0.001  # Minimum improvement threshold
+    'random_state': 42
 }

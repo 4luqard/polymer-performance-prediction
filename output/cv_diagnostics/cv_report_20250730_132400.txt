@@ -1,0 +1,70 @@
+============================================================
+CV DIAGNOSTIC SUMMARY - Session: 20250730_132400
+============================================================
+
+Overall CV Score: 0.0593 (+/- 0.0022)
+Individual Fold Scores: [0.05799376753027415, 0.059244942152454114, 0.05709615190558247, 0.05859491862954597, 0.06343475676129873]
+
+----------------------------------------
+FOLD-WISE ANALYSIS
+----------------------------------------
+
+Fold 0:
+  Score: 0.05799376753027415
+  Train Size: 13570
+  Val Size: 3393
+  Target Training Details:
+    Tg: 433 train, 124 val, 32 features, alpha=1.0
+    FFV: 6301 train, 1591 val, 32 features, alpha=1.0
+    Tc: 589 train, 148 val, 32 features, alpha=1.0
+    Density: 492 train, 121 val, 32 features, alpha=1.0
+    Rg: 494 train, 120 val, 32 features, alpha=1.0
+
+Fold 1:
+  Score: 0.059244942152454114
+  Train Size: 13570
+  Val Size: 3393
+  Target Training Details:
+    Tg: 451 train, 106 val, 32 features, alpha=1.0
+    FFV: 6285 train, 1607 val, 32 features, alpha=1.0
+    Tc: 592 train, 145 val, 32 features, alpha=1.0
+    Density: 490 train, 123 val, 32 features, alpha=1.0
+    Rg: 490 train, 124 val, 32 features, alpha=1.0
+
+Fold 2:
+  Score: 0.05709615190558247
+  Train Size: 13570
+  Val Size: 3393
+  Target Training Details:
+    Tg: 445 train, 112 val, 32 features, alpha=1.0
+    FFV: 6317 train, 1575 val, 32 features, alpha=1.0
+    Tc: 599 train, 138 val, 32 features, alpha=1.0
+    Density: 497 train, 116 val, 32 features, alpha=1.0
+    Rg: 496 train, 118 val, 32 features, alpha=1.0
+
+Fold 3:
+  Score: 0.05859491862954597
+  Train Size: 13571
+  Val Size: 3392
+  Target Training Details:
+    Tg: 449 train, 108 val, 32 features, alpha=1.0
+    FFV: 6323 train, 1569 val, 32 features, alpha=1.0
+    Tc: 581 train, 156 val, 32 features, alpha=1.0
+    Density: 488 train, 125 val, 32 features, alpha=1.0
+    Rg: 490 train, 124 val, 32 features, alpha=1.0
+
+Fold 4:
+  Score: 0.06343475676129873
+  Train Size: 13571
+  Val Size: 3392
+  Target Training Details:
+    Tg: 450 train, 107 val, 32 features, alpha=1.0
+    FFV: 6342 train, 1550 val, 32 features, alpha=1.0
+    Tc: 587 train, 150 val, 32 features, alpha=1.0
+    Density: 485 train, 128 val, 32 features, alpha=1.0
+    Rg: 486 train, 128 val, 32 features, alpha=1.0
+
+----------------------------------------
+POTENTIAL ISSUES DETECTED
+----------------------------------------
+⚠️  Inconsistent train sizes across folds: [13570, 13570, 13570, 13571, 13571]
