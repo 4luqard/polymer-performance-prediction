@@ -1,0 +1,34 @@
+Feature Importance for Tg
+========================================
+heteroatom_ratio: 409.0000
+molecular_weight: 392.0000
+aromatic_ratio: 368.0000
+num_C: 326.0000
+length: 267.0000
+heavy_atom_count: 212.0000
+molecular_complexity: 204.0000
+chain_length_estimate: 203.0000
+num_double_bonds: 142.0000
+num_branches: 123.0000
+heteroatom_count: 101.0000
+num_rings: 86.0000
+num_aromatic_atoms: 70.0000
+has_amine: 57.0000
+num_single_bonds: 48.0000
+has_amide: 47.0000
+has_ester: 40.0000
+has_phenyl: 33.0000
+num_n: 28.0000
+has_carbonyl: 26.0000
+has_ether: 16.0000
+num_triple_bonds: 14.0000
+has_methyl: 10.0000
+has_sulfone: 9.0000
+has_bridge: 2.0000
+num_aromatic_bonds: 0.0000
+num_chiral_centers: 0.0000
+rotatable_bond_estimate: 0.0000
+flexibility_score: 0.0000
+has_cyclohexyl: 0.0000
+has_fused_rings: 0.0000
+has_spiro: 0.0000

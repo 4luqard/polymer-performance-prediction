@@ -1,0 +1,34 @@
+Feature Importance for FFV
+========================================
+heteroatom_ratio: 818.0000
+molecular_weight: 772.0000
+heavy_atom_count: 498.0000
+length: 478.0000
+chain_length_estimate: 464.0000
+aromatic_ratio: 441.0000
+molecular_complexity: 329.0000
+heteroatom_count: 326.0000
+num_double_bonds: 290.0000
+num_branches: 271.0000
+num_rings: 187.0000
+has_amine: 162.0000
+num_aromatic_atoms: 156.0000
+num_single_bonds: 137.0000
+num_S: 125.0000
+has_carbonyl: 94.0000
+has_amide: 75.0000
+num_triple_bonds: 72.0000
+num_n: 72.0000
+has_phenyl: 67.0000
+num_chiral_centers: 44.0000
+has_ether: 38.0000
+has_methyl: 38.0000
+has_ester: 21.0000
+has_sulfone: 14.0000
+has_fused_rings: 4.0000
+has_spiro: 3.0000
+has_bridge: 3.0000
+has_cyclohexyl: 1.0000
+num_aromatic_bonds: 0.0000
+rotatable_bond_estimate: 0.0000
+flexibility_score: 0.0000

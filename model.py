@@ -331,7 +331,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         # LightGBM parameters as requested
         lgb_params = {
             'objective': 'regression',
-            'metric': 'rmse',
+            'metric': 'mae',  # Changed from rmse to mae for competition alignment
             'boosting_type': 'gbdt',
             'max_depth': -1,  # No limit
             'num_leaves': 31,

@@ -1,0 +1,34 @@
+Feature Importance for Density
+========================================
+heteroatom_ratio: 695.0000
+molecular_weight: 516.0000
+length: 403.0000
+chain_length_estimate: 379.0000
+heavy_atom_count: 264.0000
+molecular_complexity: 244.0000
+aromatic_ratio: 236.0000
+heteroatom_count: 173.0000
+num_branches: 166.0000
+num_double_bonds: 106.0000
+num_rings: 92.0000
+num_aromatic_atoms: 67.0000
+has_carbonyl: 47.0000
+has_ester: 42.0000
+has_phenyl: 38.0000
+num_Cl: 36.0000
+has_amine: 31.0000
+num_single_bonds: 30.0000
+has_methyl: 22.0000
+has_ether: 12.0000
+has_amide: 9.0000
+has_bridge: 5.0000
+num_triple_bonds: 4.0000
+num_aromatic_bonds: 0.0000
+num_chiral_centers: 0.0000
+has_sulfone: 0.0000
+rotatable_bond_estimate: 0.0000
+flexibility_score: 0.0000
+has_cyclohexyl: 0.0000
+has_fused_rings: 0.0000
+has_spiro: 0.0000
+num_Br: 0.0000
