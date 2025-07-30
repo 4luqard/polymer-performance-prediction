@@ -1,6 +1,6 @@
 # NeurIPS Open Polymer Prediction 2025
 
-This repository contains code and analysis for the NeurIPS 2025 Open Polymer Prediction competition.
+This repository contains code for the NeurIPS 2025 Open Polymer Prediction competition using LightGBM models with target-specific feature selection.
 
 ## Competition Overview
 
@@ -19,55 +19,79 @@ The training data has significant missing values (~91% of samples have only 1 ta
 ## Project Structure
 
 ```
+├── model.py                   # Main model implementation with LightGBM
+├── cv.py                      # Cross-validation functions
+├── config.py                  # LightGBM configuration parameters
+├── src/                       # Source code modules
+│   └── competition_metric.py  # Competition evaluation metric
+├── scripts/                   # Utility scripts
+│   ├── submit_to_kaggle.py    # Kaggle submission script
+│   └── visualization/         # Visualization scripts
+│       └── visualize_trees.py # LightGBM tree visualization
+├── utils/                     # Utility functions
+│   ├── diagnostics/           # CV diagnostics (disabled)
+│   └── test/                  # Model testing utilities
 ├── data/                      # Competition data
 │   └── raw/                   # Original data files
 │       ├── train.csv          # Training data with partial targets
 │       ├── test.csv           # Test data (SMILES only)
 │       └── train_supplement/  # Additional training datasets
-├── src/                       # Source code modules
-├── utils/                     # Utility functions
-│   ├── diagnostics/          # Model diagnostics tools
-│   ├── test/                 # Testing utilities
-│   └── tracking/             # Submission tracking tools
-├── output/                    # Model outputs and submissions
-├── model.py                   # Main model implementation
-└── findings.md               # Research findings and investigations
+└── output/                    # Model outputs
+    ├── submission.csv         # Competition submission
+    └── lgbm_trees/           # Tree visualizations
 ```
+
+## Model Approach
+
+- **Algorithm**: LightGBM with target-specific models
+- **Features**: Molecular features extracted from SMILES including:
+  - Atom counts and ratios
+  - Structural features (rings, branches, bonds)
+  - Functional group indicators
+  - Molecular weight and complexity
+- **Cross-validation**: Multi-seed CV with competition metric (MAE-based)
+- **Score**: CV score of 0.0599 (+/- 0.0025)
 
 ## Quick Start
 
 1. Install dependencies:
 ```bash
-pip install --user pandas numpy scikit-learn rdkit torch
+pip install --user pandas numpy scikit-learn lightgbm rdkit
 ```
 
 2. Download competition data (requires Kaggle API):
 ```bash
 kaggle competitions download -c neurips-open-polymer-prediction-2025 -p data/
+cd data/raw && unzip neurips-open-polymer-prediction-2025.zip
 ```
 
 3. Run the model:
 ```bash
+# For training and submission
 python model.py
+
+# For cross-validation only
+python model.py --cv
+
+# Without supplementary data
+python model.py --no-supplement
 ```
+
+4. Visualize decision trees:
+```bash
+cd scripts/visualization
+python visualize_trees.py
+```
+
+## Key Features
+
+- **Target-specific feature selection**: Different atom features selected for each target based on importance
+- **Separate models**: Individual LightGBM model trained for each of the 5 targets
+- **Missing value handling**: Models trained only on samples with available target values
+- **Supplementary data**: Optional inclusion of additional training datasets
 
 ## Missing Value Patterns
 
 - Each polymer typically has only 1 out of 5 target values present
 - Missing patterns show strong correlations (e.g., Density & Rg almost always missing/present together)
 - Missing values are due to measurement limitations, not intentional design
-
-## Documentation Structure
-
-The project documentation is organized by category for easy navigation:
-
-- `docs/polymer_properties.md` - Detailed information about the 5 target properties (Tg, FFV, Tc, Density, Rg)
-- `docs/smiles_notation.md` - Guide to understanding and analyzing polymer SMILES notation
-- `docs/crystallinity_analysis.md` - Research findings on polymer crystallinity and its relationship to properties
-- `docs/property_relationships.md` - Analysis of interdependencies between polymer properties
-
-For specific topics:
-- **Understanding target properties?** → See `docs/polymer_properties.md`
-- **Working with SMILES?** → See `docs/smiles_notation.md`
-- **Crystallinity questions?** → See `docs/crystallinity_analysis.md`
-- **Property correlations?** → See `docs/property_relationships.md`

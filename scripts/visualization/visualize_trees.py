@@ -12,6 +12,10 @@ import os
 import json
 from pathlib import Path
 
+# Add parent directory to path for imports
+import sys
+sys.path.append('../..')
+
 # Import from model
 from model import (
     TRAIN_PATH, TEST_PATH, SUPP_PATHS,
