@@ -129,7 +129,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         # LightGBM parameters as requested
                         lgb_params = {
                             'objective': 'regression',
-                            'metric': 'rmse',
+                            'metric': 'mae',  # Changed from rmse to mae for competition alignment
                             'boosting_type': 'gbdt',
                             'max_depth': -1,  # No limit
                             'num_leaves': 31,
