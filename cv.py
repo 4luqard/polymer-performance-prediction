@@ -17,6 +17,7 @@ warnings.filterwarnings('ignore')
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
 from utils.diagnostics import CVDiagnostics
+from config import LIGHTGBM_PARAMS
 
 
 def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm'):
@@ -126,21 +127,9 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     
                     # Train model based on type
                     if model_type == 'lightgbm':
-                        # LightGBM parameters as requested
-                        lgb_params = {
-                            'objective': 'regression',
-                            'metric': 'mae',  # Changed from rmse to mae for competition alignment
-                            'boosting_type': 'gbdt',
-                            'max_depth': -1,  # No limit
-                            'num_leaves': 31,
-                            'n_estimators': 200,
-                            'learning_rate': 0.1,
-                            'feature_fraction': 0.9,
-                            'bagging_fraction': 0.8,
-                            'bagging_freq': 5,
-                            'verbose': -1,
-                            'random_state': random_seed
-                        }
+                        # Use parameters from config for single source of truth
+                        lgb_params = LIGHTGBM_PARAMS.copy()
+                        lgb_params['random_state'] = random_seed  # Override seed for CV
                         model = lgb.LGBMRegressor(**lgb_params)
                     else:
                         # Ridge model with target-specific alpha

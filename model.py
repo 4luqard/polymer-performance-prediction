@@ -27,6 +27,7 @@ if not IS_KAGGLE:
     from src.competition_metric import neurips_polymer_metric
     from utils.diagnostics import CVDiagnostics
     from cv import perform_cross_validation, perform_multi_seed_cv
+    from config import LIGHTGBM_PARAMS
 
 
 # Already checked above
@@ -328,21 +329,28 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     
     # Model parameters
     if model_type == 'lightgbm':
-        # LightGBM parameters as requested
-        lgb_params = {
-            'objective': 'regression',
-            'metric': 'mae',  # Changed from rmse to mae for competition alignment
-            'boosting_type': 'gbdt',
-            'max_depth': -1,  # No limit
-            'num_leaves': 31,
-            'n_estimators': 200,
-            'learning_rate': 0.1,
-            'feature_fraction': 0.9,
-            'bagging_fraction': 0.8,
-            'bagging_freq': 5,
-            'verbose': -1,
-            'random_state': 42
-        }
+        # Use parameters from config for single source of truth
+        if IS_KAGGLE:
+            # Need to define params inline for Kaggle since we can't import config
+            lgb_params = {
+                'objective': 'regression',
+                'metric': 'mae',
+                'boosting_type': 'gbdt',
+                'max_depth': -1,
+                'num_leaves': 31,
+                'n_estimators': 200,
+                'learning_rate': 0.1,
+                'feature_fraction': 0.9,
+                'bagging_fraction': 0.8,
+                'bagging_freq': 5,
+                'verbose': -1,
+                'random_state': 42,
+                'n_iter_no_change': 50,
+                'validation_fraction': 0.15,
+                'tol': 0.001
+            }
+        else:
+            lgb_params = LIGHTGBM_PARAMS.copy()
     else:
         # Ridge parameters
         target_alphas = {
