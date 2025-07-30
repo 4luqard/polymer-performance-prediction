@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Cross-Validation Functions for NeurIPS Open Polymer Prediction 2025
-Extracted from model.py for better readability and organization
+Updated to use LightGBM for better handling of non-linear relationships
 """
 
 import pandas as pd
@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
+import lightgbm as lgb
 from sklearn.metrics import mean_squared_error
 import warnings
 warnings.filterwarnings('ignore')
@@ -122,18 +123,24 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                             # Scale validation features
                             X_val_scaled = scaler.transform(X_val_complete)
                     
-                    # Use target-specific alpha
-                    target_alphas = {
-                        'Tg': 10.0,
-                        'FFV': 1.0,
-                        'Tc': 10.0,
-                        'Density': 5.0,
-                        'Rg': 10.0
+                    # LightGBM parameters as requested
+                    lgb_params = {
+                        'objective': 'regression',
+                        'metric': 'rmse',
+                        'boosting_type': 'gbdt',
+                        'max_depth': -1,  # No limit
+                        'num_leaves': 31,
+                        'n_estimators': 200,
+                        'learning_rate': 0.1,
+                        'feature_fraction': 0.9,
+                        'bagging_fraction': 0.8,
+                        'bagging_freq': 5,
+                        'verbose': -1,
+                        'random_state': random_seed
                     }
-                    alpha = target_alphas.get(target, 1.0)
                     
-                    # Train Ridge model
-                    model = Ridge(alpha=alpha, random_state=random_seed)
+                    # Train LightGBM model
+                    model = lgb.LGBMRegressor(**lgb_params)
                     model.fit(X_target_scaled, y_target_complete)
                     
                     # Initialize predictions with median for all samples
@@ -154,7 +161,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                             len(X_target_complete), 
                             len(X_val_complete) if len(val_mask_indices) > 0 and X_val_complete is not None else 0,
                             features_used, 
-                            alpha
+                            f"LightGBM(leaves={lgb_params['num_leaves']}, n_est={lgb_params['n_estimators']})"
                         )
                     
                     # Track predictions if diagnostics enabled
