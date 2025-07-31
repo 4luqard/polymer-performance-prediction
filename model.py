@@ -60,6 +60,68 @@ else:
         'data/raw/train_supplement/dataset4.csv'
     ]
 
+def calculate_main_branch_atoms(smiles):
+    """
+    Calculate the number of atoms in the main branch of a polymer.
+    The main branch is the longest continuous chain in the molecule.
+    
+    Examples:
+    *SCCCCC* -> 6 (all carbons and sulfur in main chain)
+    *OCC1C(C1)C* -> 5 (O-C-C-C-C, one C is in branch)
+    """
+    # Remove polymer end markers for processing
+    clean_smiles = smiles.replace('*', '')
+    
+    # More sophisticated approach: analyze the structure
+    # First, count total atoms excluding those in branches
+    total_atoms = 0
+    branch_atoms = 0
+    in_branch = False
+    branch_depth = 0
+    
+    i = 0
+    while i < len(clean_smiles):
+        char = clean_smiles[i]
+        
+        # Track branch depth
+        if char == '(':
+            branch_depth += 1
+            in_branch = True
+            i += 1
+            continue
+        elif char == ')':
+            branch_depth -= 1
+            if branch_depth == 0:
+                in_branch = False
+            i += 1
+            continue
+        
+        # Check for two-letter atoms
+        two_letter = None
+        if i + 1 < len(clean_smiles):
+            two_letter = clean_smiles[i:i+2]
+            if two_letter in ['Cl', 'Br']:
+                if in_branch:
+                    branch_atoms += 1
+                else:
+                    total_atoms += 1
+                i += 2
+                continue
+        
+        # Single letter atoms and aromatic atoms
+        if char in 'CNOSFIPcnos':
+            if in_branch:
+                branch_atoms += 1
+            else:
+                total_atoms += 1
+            i += 1
+        else:
+            # Skip numbers, bonds, and other symbols
+            i += 1
+    
+    # Return atoms in main chain
+    return total_atoms
+
 def extract_molecular_features(smiles):
     """Extract features from SMILES string without external libraries"""
     features = {}
@@ -180,6 +242,9 @@ def extract_molecular_features(smiles):
     features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
     features['has_spiro'] = int('@' in smiles and smiles.count('@') > 1)
     features['has_bridge'] = int(bool(re.search(r'[0-9].*[0-9]', smiles)))
+    
+    # Main branch atom count
+    features['main_branch_atoms'] = calculate_main_branch_atoms(smiles)
     
     return features
 
