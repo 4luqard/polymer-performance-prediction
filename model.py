@@ -197,10 +197,12 @@ def prepare_features(df):
     print("Extracting molecular features...")
     features_list = []
     
-    for idx, smiles in enumerate(df['SMILES']):
+    for idx, row in df.iterrows():
         if idx % 1000 == 0:
             print(f"Processing molecule {idx}/{len(df)}...")
-        features = extract_molecular_features(smiles)
+        features = extract_molecular_features(row['SMILES'])
+        # Add new_sim feature
+        features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
         features_list.append(features)
     
     features_df = pd.DataFrame(features_list)
@@ -234,6 +236,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     
     # Load main training data
     train_df = pd.read_csv(TRAIN_PATH)
+    # Add new_sim flag - True for main dataset
+    train_df['new_sim'] = True
     print(f"Main training data shape: {train_df.shape}")
     
     if use_supplementary:
@@ -244,6 +248,21 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         for supp_path in SUPP_PATHS:
             try:
                 supp_df = pd.read_csv(supp_path)
+                
+                # Handle dataset1 with Tc_mean column
+                if 'dataset1.csv' in supp_path and 'TC_mean' in supp_df.columns:
+                    # Rename TC_mean to Tc
+                    supp_df = supp_df.rename(columns={'TC_mean': 'Tc'})
+                    print(f"Renamed TC_mean to Tc in dataset1")
+                
+                # Add id column if missing
+                if 'id' not in supp_df.columns:
+                    # Create synthetic ids for supplementary data
+                    supp_df['id'] = [f'supp_{supp_path.split("/")[-1].split(".")[0]}_{i}' 
+                                     for i in range(len(supp_df))]
+                
+                # Add new_sim flag - False for supplementary datasets
+                supp_df['new_sim'] = False
                 print(f"Loaded {supp_path}: {supp_df.shape}")
                 all_train_dfs.append(supp_df)
             except Exception as e:
@@ -258,6 +277,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     # Load test data
     print("\nLoading test data...")
     test_df = pd.read_csv(TEST_PATH)
+    # Add new_sim flag - True for test dataset (as it's from the competition)
+    test_df['new_sim'] = True
     print(f"Test data shape: {test_df.shape}")
     
     # Extract features
