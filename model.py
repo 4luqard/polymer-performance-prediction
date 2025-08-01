@@ -68,59 +68,93 @@ def calculate_main_branch_atoms(smiles):
     Examples:
     *SCCCCC* -> 6 (all carbons and sulfur in main chain)
     *OCC1C(C1)C* -> 5 (O-C-C-C-C, one C is in branch)
+    *CC(CC)CC* -> 5 (C-C-C-C-C, CC is a 2-atom branch)
     """
     # Remove polymer end markers for processing
     clean_smiles = smiles.replace('*', '')
     
-    # More sophisticated approach: analyze the structure
-    # First, count total atoms excluding those in branches
-    total_atoms = 0
-    branch_atoms = 0
-    in_branch = False
-    branch_depth = 0
-    
+    # Parse the SMILES to build a simple graph representation
+    atoms = []
+    atom_idx = 0
     i = 0
+    parent_stack = []
+    current_parent = -1
+    
     while i < len(clean_smiles):
         char = clean_smiles[i]
         
-        # Track branch depth
         if char == '(':
-            branch_depth += 1
-            in_branch = True
+            # Start of branch - push current atom to stack
+            parent_stack.append(current_parent)
             i += 1
             continue
         elif char == ')':
-            branch_depth -= 1
-            if branch_depth == 0:
-                in_branch = False
+            # End of branch - pop parent from stack
+            if parent_stack:
+                current_parent = parent_stack.pop()
             i += 1
             continue
         
         # Check for two-letter atoms
-        two_letter = None
-        if i + 1 < len(clean_smiles):
-            two_letter = clean_smiles[i:i+2]
-            if two_letter in ['Cl', 'Br']:
-                if in_branch:
-                    branch_atoms += 1
-                else:
-                    total_atoms += 1
-                i += 2
-                continue
-        
-        # Single letter atoms and aromatic atoms
-        if char in 'CNOSFIPcnos':
-            if in_branch:
-                branch_atoms += 1
-            else:
-                total_atoms += 1
+        atom = None
+        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br']:
+            atom = clean_smiles[i:i+2]
+            i += 2
+        elif char in 'CNOSFIPcnos':
+            atom = char
             i += 1
         else:
-            # Skip numbers, bonds, and other symbols
+            # Skip bonds, numbers, and other symbols
             i += 1
+            continue
+        
+        if atom:
+            atoms.append({
+                'atom': atom,
+                'idx': atom_idx,
+                'parent': current_parent,
+                'children': []
+            })
+            
+            # Update parent's children list
+            if current_parent >= 0:
+                atoms[current_parent]['children'].append(atom_idx)
+            
+            current_parent = atom_idx
+            atom_idx += 1
     
-    # Return atoms in main chain
-    return total_atoms
+    # Find the longest path in the tree
+    if not atoms:
+        return 0
+    
+    def find_longest_path(idx, visited):
+        """DFS to find longest path from given atom"""
+        if idx in visited:
+            return 0
+        
+        visited.add(idx)
+        max_length = 0
+        
+        # Check parent
+        if atoms[idx]['parent'] >= 0 and atoms[idx]['parent'] not in visited:
+            parent_path = find_longest_path(atoms[idx]['parent'], visited.copy())
+            max_length = max(max_length, parent_path)
+        
+        # Check children
+        for child_idx in atoms[idx]['children']:
+            if child_idx not in visited:
+                child_path = find_longest_path(child_idx, visited.copy())
+                max_length = max(max_length, child_path)
+        
+        return max_length + 1
+    
+    # Try starting from each atom to find the absolute longest path
+    max_path_length = 0
+    for start_idx in range(len(atoms)):
+        path_length = find_longest_path(start_idx, set())
+        max_path_length = max(max_path_length, path_length)
+    
+    return max_path_length
 
 def extract_molecular_features(smiles):
     """Extract features from SMILES string without external libraries"""
@@ -130,19 +164,24 @@ def extract_molecular_features(smiles):
     features['length'] = len(smiles)
     
     # Count different atoms (case-sensitive for aromatic vs non-aromatic)
-    features['num_C'] = len(re.findall(r'C', smiles))
-    features['num_c'] = len(re.findall(r'c', smiles))  # aromatic carbon
-    features['num_O'] = len(re.findall(r'O', smiles))
-    features['num_o'] = len(re.findall(r'o', smiles))  # aromatic oxygen
-    features['num_N'] = len(re.findall(r'N', smiles))
-    features['num_n'] = len(re.findall(r'n', smiles))  # aromatic nitrogen
-    features['num_S'] = len(re.findall(r'S', smiles))
-    features['num_s'] = len(re.findall(r's', smiles))  # aromatic sulfur
-    features['num_F'] = smiles.count('F')
+    # First count two-letter atoms to avoid double counting
     features['num_Cl'] = smiles.count('Cl')
     features['num_Br'] = smiles.count('Br')
-    features['num_I'] = smiles.count('I')
-    features['num_P'] = smiles.count('P')
+    
+    # Remove two-letter atoms before counting single letters
+    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '')
+    
+    features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
+    features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
+    features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
+    features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
+    features['num_N'] = len(re.findall(r'N', smiles_no_cl_br))
+    features['num_n'] = len(re.findall(r'n', smiles_no_cl_br))  # aromatic nitrogen
+    features['num_S'] = len(re.findall(r'S', smiles_no_cl_br))
+    features['num_s'] = len(re.findall(r's', smiles_no_cl_br))  # aromatic sulfur
+    features['num_F'] = smiles_no_cl_br.count('F')
+    features['num_I'] = smiles_no_cl_br.count('I')
+    features['num_P'] = smiles_no_cl_br.count('P')
     
     # Count bonds
     features['num_single_bonds'] = smiles.count('-')
@@ -151,7 +190,12 @@ def extract_molecular_features(smiles):
     features['num_aromatic_bonds'] = smiles.count(':')
     
     # Count structural features
-    features['num_rings'] = sum(smiles.count(str(i)) for i in range(1, 10))
+    # Count unique ring identifiers (each ring is closed once)
+    ring_closures = set()
+    for i in range(1, 10):
+        if str(i) in smiles:
+            ring_closures.add(str(i))
+    features['num_rings'] = len(ring_closures)
     features['num_branches'] = smiles.count('(')
     features['num_chiral_centers'] = smiles.count('@')
     
@@ -233,7 +277,8 @@ def extract_molecular_features(smiles):
     features['molecular_weight'] = round(mol_weight, 1)
     
     # Additional polymer-specific patterns
-    features['has_phenyl'] = int('c1ccccc1' in smiles or 'c1ccc' in smiles)
+    # Phenyl: aromatic 6-membered ring patterns
+    features['has_phenyl'] = int(bool(re.search(r'c1ccccc1|c1ccc.*cc1', smiles)))
     features['has_cyclohexyl'] = int('C1CCCCC1' in smiles)
     features['has_methyl'] = int(bool(re.search(r'C(?![a-zA-Z])', smiles)))
     features['chain_length_estimate'] = max(len(x) for x in re.split(r'[\(\)]', smiles) if x)
@@ -245,6 +290,9 @@ def extract_molecular_features(smiles):
     
     # Main branch atom count
     features['main_branch_atoms'] = calculate_main_branch_atoms(smiles)
+    
+    # Main branch atom ratio (main branch atoms / total heavy atoms)
+    features['main_branch_atom_ratio'] = round(features['main_branch_atoms'] / max(features['heavy_atom_count'], 1), 3)
     
     return features
 
