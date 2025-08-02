@@ -229,6 +229,46 @@ def extract_molecular_features(smiles):
     # Round to 0.1 significance
     features['molecular_weight'] = round(mol_weight, 1)
     
+    # Van der Waals volume calculation (heavy atoms only, no H estimation)
+    # Van der Waals volumes in Angstrom^3 (Bondi, 1964)
+    vdw_volumes = {
+        'C': 20.58, 'c': 20.58,  # Carbon (both aliphatic and aromatic)
+        'N': 15.60, 'n': 15.60,  # Nitrogen
+        'O': 14.71, 'o': 14.71,  # Oxygen  
+        'S': 24.43, 's': 24.43,  # Sulfur
+        'F': 13.31,              # Fluorine
+        'Cl': 22.45,             # Chlorine
+        'Br': 26.52,             # Bromine
+        'I': 32.52,              # Iodine
+        'P': 24.43               # Phosphorus
+    }
+    
+    # Calculate total Van der Waals volume
+    vdw_volume = 0.0
+    vdw_volume += features['num_C'] * vdw_volumes['C']
+    vdw_volume += features['num_c'] * vdw_volumes['c']
+    vdw_volume += features['num_O'] * vdw_volumes['O']
+    vdw_volume += features['num_o'] * vdw_volumes['o']
+    vdw_volume += features['num_N'] * vdw_volumes['N']
+    vdw_volume += features['num_n'] * vdw_volumes['n']
+    vdw_volume += features['num_S'] * vdw_volumes['S']
+    vdw_volume += features['num_s'] * vdw_volumes['s']
+    vdw_volume += features['num_F'] * vdw_volumes['F']
+    vdw_volume += features['num_Cl'] * vdw_volumes['Cl']
+    vdw_volume += features['num_Br'] * vdw_volumes['Br']
+    vdw_volume += features['num_I'] * vdw_volumes['I']
+    vdw_volume += features['num_P'] * vdw_volumes['P']
+    
+    # Round to 0.1 significance  
+    features['vdw_volume'] = round(vdw_volume, 1)
+    
+    # Density estimate: molecular weight / volume
+    # Units: g/mol / Å³
+    if vdw_volume > 0:
+        features['density_estimate'] = round(mol_weight / vdw_volume, 3)
+    else:
+        features['density_estimate'] = 0.0
+    
     # Additional polymer-specific patterns
     # Phenyl: aromatic 6-membered ring patterns
     features['has_phenyl'] = int(bool(re.search(r'c1ccccc1|c1ccc.*cc1', smiles)))
