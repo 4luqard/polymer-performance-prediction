@@ -269,8 +269,14 @@ def extract_molecular_features(smiles):
     if vdw_volume > 0:
         density_g_mol_A3 = mol_weight / vdw_volume
         features['density_estimate'] = round(density_g_mol_A3 * 1.66054, 3)
+        
+        # FFV estimation using original density units
+        # FFV = (V - 1.3 × Vw) / V where V = 1/density in Å³/(g/mol)
+        specific_volume = 1.0 / density_g_mol_A3  # Å³/(g/mol)
+        features['ffv_estimate'] = round((specific_volume - 1.3 * vdw_volume) / specific_volume, 3)
     else:
         features['density_estimate'] = 0.0
+        features['ffv_estimate'] = 0.0
     
     # Additional polymer-specific patterns
     # Phenyl: aromatic 6-membered ring patterns
