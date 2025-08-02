@@ -263,9 +263,12 @@ def extract_molecular_features(smiles):
     features['vdw_volume'] = round(vdw_volume, 1)
     
     # Density estimate: molecular weight / volume
-    # Units: g/mol / Å³
+    # Convert from g/mol/Å³ to g/cm³
+    # 1 Å³ = 10⁻²⁴ cm³, 1 mol = 6.022 × 10²³ molecules
+    # Conversion factor: 10²⁴ / 6.022 × 10²³ = 1.66054
     if vdw_volume > 0:
-        features['density_estimate'] = round(mol_weight / vdw_volume, 3)
+        density_g_mol_A3 = mol_weight / vdw_volume
+        features['density_estimate'] = round(density_g_mol_A3 * 1.66054, 3)
     else:
         features['density_estimate'] = 0.0
     
