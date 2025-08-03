@@ -1,6 +1,6 @@
 # NeurIPS Open Polymer Prediction 2025
 
-This repository contains code for the NeurIPS 2025 Open Polymer Prediction competition using LightGBM models with target-specific feature selection.
+This repository contains a LightGBM-based solution for the NeurIPS 2025 Open Polymer Prediction competition, featuring target-specific feature selection and comprehensive molecular feature engineering.
 
 ## Competition Overview
 
@@ -26,10 +26,9 @@ The training data has significant missing values (~91% of samples have only 1 ta
 │   └── competition_metric.py  # Competition evaluation metric
 ├── scripts/                   # Utility scripts
 │   ├── submit_to_kaggle.py    # Kaggle submission script
-│   └── visualization/         # Visualization scripts
-│       └── visualize_trees.py # LightGBM tree visualization
+│   └── visualize_lgbm_trees.py # LightGBM tree visualization
 ├── utils/                     # Utility functions
-│   ├── diagnostics/           # CV diagnostics (disabled)
+│   ├── diagnostics/           # CV diagnostics utilities
 │   └── test/                  # Model testing utilities
 ├── data/                      # Competition data
 │   └── raw/                   # Original data files
@@ -43,14 +42,20 @@ The training data has significant missing values (~91% of samples have only 1 ta
 
 ## Model Approach
 
-- **Algorithm**: LightGBM with target-specific models
-- **Features**: Molecular features extracted from SMILES including:
-  - Atom counts and ratios
-  - Structural features (rings, branches, bonds)
-  - Functional group indicators
-  - Molecular weight and complexity
-- **Cross-validation**: Multi-seed CV with competition metric (MAE-based)
-- **Score**: CV score of 0.0599 (+/- 0.0025)
+- **Algorithm**: LightGBM gradient boosting with target-specific models
+- **Features**: Comprehensive molecular features extracted from SMILES:
+  - Atom counts by type (C, N, O, S, F, Cl, Br, I, P) and aromaticity
+  - Bond counts (single, double, triple, aromatic)
+  - Structural features (rings, branches, chiral centers)
+  - Functional group indicators (carbonyl, ether, amine, sulfone, ester, amide)
+  - Molecular weight and complexity metrics
+  - Van der Waals volume and density estimation
+  - Main branch atom analysis
+  - Polymer-specific patterns (phenyl, cyclohexyl groups)
+  - FFV (Fractional Free Volume) estimation
+  - Dataset source indicator (new_sim feature)
+- **Cross-validation**: Multi-seed CV (seeds: 42, 123, 456) with competition metric
+- **Current Performance**: CV score of 0.0540 (+/- 0.0021)
 
 ## Quick Start
 
@@ -79,19 +84,37 @@ python model.py --no-supplement
 
 4. Visualize decision trees:
 ```bash
-cd scripts/visualization
-python visualize_trees.py
+python scripts/visualize_lgbm_trees.py
 ```
 
-## Key Features
+## Key Implementation Details
 
-- **Target-specific feature selection**: Different atom features selected for each target based on importance
-- **Separate models**: Individual LightGBM model trained for each of the 5 targets
+- **Target-specific feature selection**: Optimized atom features for each target:
+  - Tg: num_C, num_n (aromatic nitrogen)
+  - FFV: num_S, num_n
+  - Tc: num_C, num_S
+  - Density: num_Cl, num_Br
+  - Rg: num_F, num_Cl
+- **Separate models**: Individual LightGBM model trained for each target
 - **Missing value handling**: Models trained only on samples with available target values
-- **Supplementary data**: Optional inclusion of additional training datasets
+- **Supplementary datasets**: Integrates dataset1 from train_supplement (renaming TC_mean to Tc)
+- **Feature engineering**: 49 total features including molecular descriptors and structural patterns
+
+## Configuration
+
+LightGBM parameters (defined in `config.py`):
+- `objective`: regression
+- `metric`: mae
+- `boosting_type`: gbdt
+- `max_depth`: -1 (no limit)
+- `num_leaves`: 31
+- `n_estimators`: 200
+- `learning_rate`: 0.1
+- `feature_fraction`: 0.9
+- `bagging_fraction`: 0.8
 
 ## Missing Value Patterns
 
 - Each polymer typically has only 1 out of 5 target values present
 - Missing patterns show strong correlations (e.g., Density & Rg almost always missing/present together)
-- Missing values are due to measurement limitations, not intentional design
+- Missing values are due to measurement limitations in molecular dynamics simulations
