@@ -157,7 +157,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                             X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
                                 X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
                             )
-                            model.fit(X_tr, y_tr, eval_set=[(X_val_inner, y_val_inner)], callbacks=[lgb.log_evaluation(0)])
+                            model.fit(X_tr, y_tr, eval_set=[(X_val_inner, y_val_inner)], eval_metric='mae', callbacks=[lgb.log_evaluation(0)])
                         else:
                             model.fit(X_target_final, y_target_complete)
                     else:
