@@ -16,6 +16,7 @@ import lightgbm as lgb
 import re
 import sys
 import os
+import math
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -489,6 +490,16 @@ def extract_molecular_features(smiles):
     
     # Average bond length
     features['avg_bond_length'] = calculate_average_bond_length(smiles)
+    
+    # Rg estimation using formula: Rg = sqrt((N × b²) / 6)
+    # where N is backbone bond count and b is average bond length
+    N = features['backbone_bonds']
+    b = features['avg_bond_length']
+    if N > 0 and b > 0:
+        rg_squared = (N * b * b) / 6.0
+        features['rg_estimate'] = round(math.sqrt(rg_squared), 3)
+    else:
+        features['rg_estimate'] = 0.0
     
     return features
 
