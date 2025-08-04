@@ -10,7 +10,7 @@ from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.decomposition import PCA
 import lightgbm as lgb
@@ -761,13 +761,29 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 # Train model for this target
                 if model_type == 'lightgbm':
                     model = lgb.LGBMRegressor(**lgb_params)
+                    # Split data for validation to track overfitting
+                    X_tr, X_val, y_tr, y_val = train_test_split(
+                        X_target_final, y_target_complete, 
+                        test_size=0.2, random_state=42
+                    )
+                    # Train with validation data to see training progress
+                    model.fit(
+                        X_tr, y_tr,
+                        eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                        eval_names=['train', 'valid'],
+                        eval_metric='mae',
+                        callbacks=[lgb.log_evaluation(20)]
+                    )
+                    # Print final scores
+                    train_score = model.score(X_tr, y_tr)
+                    val_score = model.score(X_val, y_val)
+                    print(f"  Final R2 - Train: {train_score:.4f}, Valid: {val_score:.4f}")
                 else:
                     # Use Ridge with target-specific alpha
                     alpha = target_alphas.get(target, 1.0)
                     print(f"  Using alpha={alpha}")
                     model = Ridge(alpha=alpha, random_state=42)
-                
-                model.fit(X_target_final, y_target_complete)
+                    model.fit(X_target_final, y_target_complete)
                 
                 # Make predictions
                 predictions[:, i] = model.predict(X_test_final)
