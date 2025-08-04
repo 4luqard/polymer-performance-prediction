@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.decomposition import PCA
 import lightgbm as lgb
 import re
 import sys
@@ -22,6 +23,9 @@ warnings.filterwarnings('ignore')
 
 # Check if running on Kaggle or locally
 IS_KAGGLE = os.path.exists('/kaggle/input')
+
+# PCA variance threshold - set to None to disable PCA
+PCA_VARIANCE_THRESHOLD = None
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -730,12 +734,29 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 scaler = StandardScaler()
                 X_target_scaled = scaler.fit_transform(X_target_complete)
                 
+                # Apply PCA if enabled
+                pca = None
+                if PCA_VARIANCE_THRESHOLD is not None:
+                    pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=42)
+                    X_target_pca = pca.fit_transform(X_target_scaled)
+                    print(f"  PCA: {X_target_scaled.shape[1]} features -> {X_target_pca.shape[1]} components")
+                    print(f"  Variance preserved: {pca.explained_variance_ratio_.sum():.4f}")
+                    X_target_final = X_target_pca
+                else:
+                    X_target_final = X_target_scaled
+                
                 # For test set, we need to handle missing values somehow
                 # Use zero imputation only for test set predictions
                 imputer = SimpleImputer(strategy='constant', fill_value=0)
                 imputer.fit(X_target_complete)  # Fit on complete training data
                 X_test_imputed = imputer.transform(X_test_selected)
                 X_test_scaled = scaler.transform(X_test_imputed)
+                
+                # Apply PCA to test set if enabled
+                if pca is not None:
+                    X_test_final = pca.transform(X_test_scaled)
+                else:
+                    X_test_final = X_test_scaled
                 
                 # Train model for this target
                 if model_type == 'lightgbm':
@@ -746,10 +767,10 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                     print(f"  Using alpha={alpha}")
                     model = Ridge(alpha=alpha, random_state=42)
                 
-                model.fit(X_target_scaled, y_target_complete)
+                model.fit(X_target_final, y_target_complete)
                 
                 # Make predictions
-                predictions[:, i] = model.predict(X_test_scaled)
+                predictions[:, i] = model.predict(X_test_final)
                 print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
             else:
                 # No complete samples available, use median
