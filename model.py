@@ -772,12 +772,12 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                         eval_set=[(X_tr, y_tr), (X_val, y_val)],
                         eval_names=['train', 'valid'],
                         eval_metric='mae',
-                        callbacks=[lgb.log_evaluation(20)]
+                        callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
                     )
-                    # Print final scores
-                    train_score = model.score(X_tr, y_tr)
-                    val_score = model.score(X_val, y_val)
-                    print(f"  Final R2 - Train: {train_score:.4f}, Valid: {val_score:.4f}")
+                    # Get final MAE scores from eval results
+                    train_mae = model.evals_result_['train']['l1'][-1]
+                    val_mae = model.evals_result_['valid']['l1'][-1]
+                    print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
                 else:
                     # Use Ridge with target-specific alpha
                     alpha = target_alphas.get(target, 1.0)
