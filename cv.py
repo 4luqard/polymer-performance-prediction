@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
+from sklearn.decomposition import PCA
 import lightgbm as lgb
 from sklearn.metrics import mean_squared_error
 import warnings
@@ -18,6 +19,9 @@ warnings.filterwarnings('ignore')
 from src.competition_metric import neurips_polymer_metric
 from utils.diagnostics import CVDiagnostics
 from config import LIGHTGBM_PARAMS
+
+# PCA variance threshold - should match the one in model.py
+PCA_VARIANCE_THRESHOLD = None
 
 
 def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm'):
@@ -102,6 +106,15 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     scaler = StandardScaler()
                     X_target_scaled = scaler.fit_transform(X_target_complete)
                     
+                    # Apply PCA if enabled
+                    pca = None
+                    if PCA_VARIANCE_THRESHOLD is not None:
+                        pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=random_seed)
+                        X_target_pca = pca.fit_transform(X_target_scaled)
+                        X_target_final = X_target_pca
+                    else:
+                        X_target_final = X_target_scaled
+                    
                     # For validation set, apply same filtering as training
                     # Only evaluate on samples with non-missing target values
                     val_mask = ~y_fold_val[target].isna()
@@ -124,6 +137,12 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         if len(X_val_complete) > 0:
                             # Scale validation features
                             X_val_scaled = scaler.transform(X_val_complete)
+                            
+                            # Apply PCA to validation set if enabled
+                            if pca is not None:
+                                X_val_final = pca.transform(X_val_scaled)
+                            else:
+                                X_val_final = X_val_scaled
                     
                     # Train model based on type
                     if model_type == 'lightgbm':
@@ -143,14 +162,14 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         alpha = target_alphas.get(target, 1.0)
                         model = Ridge(alpha=alpha, random_state=random_seed)
                     
-                    model.fit(X_target_scaled, y_target_complete)
+                    model.fit(X_target_final, y_target_complete)
                     
                     # Initialize predictions with median for all samples
                     fold_predictions[:, i] = y_fold_train[target].median()
                     
                     # Make predictions only for validation samples with complete features
                     if len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
-                        predictions = model.predict(X_val_scaled)
+                        predictions = model.predict(X_val_final)
                         # Map predictions back to original validation indices
                         for idx, pred in zip(val_complete_indices, predictions):
                             fold_predictions[idx, i] = pred
