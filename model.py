@@ -826,4 +826,11 @@ if __name__ == "__main__":
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
     
-    main(cv_only=cv_only, use_supplementary=not no_supplement)
+    # Check for model type
+    model_type = 'lightgbm'  # default
+    if '--model' in sys.argv:
+        model_idx = sys.argv.index('--model')
+        if model_idx + 1 < len(sys.argv):
+            model_type = sys.argv[model_idx + 1]
+    
+    main(cv_only=cv_only, use_supplementary=not no_supplement, model_type=model_type)
