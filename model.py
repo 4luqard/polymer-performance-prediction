@@ -109,6 +109,83 @@ def calculate_main_branch_atoms(smiles):
     
     return main_chain_atoms
 
+def calculate_backbone_bonds(smiles):
+    """
+    Calculate the number of bonds in the main backbone of a polymer.
+    The main backbone excludes bonds inside parentheses (branches).
+    
+    Examples:
+    *CCCCCC* -> 5 bonds (C-C-C-C-C-C)
+    *CC(C)CC* -> 3 bonds (C-C-C-C, excluding C branch)
+    *CC(=O)CC* -> 3 bonds (C-C-C-C, excluding =O branch)
+    """
+    # Remove polymer end markers for processing
+    clean_smiles = smiles.replace('*', '')
+    
+    backbone_bonds = 0
+    in_branch = False
+    branch_depth = 0
+    prev_atom = False
+    
+    i = 0
+    while i < len(clean_smiles):
+        char = clean_smiles[i]
+        
+        if char == '(':
+            branch_depth += 1
+            in_branch = True
+            prev_atom = False
+            i += 1
+            continue
+        elif char == ')':
+            branch_depth -= 1
+            if branch_depth == 0:
+                in_branch = False
+                # After closing branch, next bond connects to backbone
+                prev_atom = True
+            i += 1
+            continue
+        
+        # Skip bonds and numbers when in branch
+        if in_branch:
+            i += 1
+            continue
+            
+        # Check for bonds
+        if char in '-=#:':
+            if prev_atom and i + 1 < len(clean_smiles):
+                # Check if next character is an atom
+                next_char = clean_smiles[i + 1]
+                if i + 2 < len(clean_smiles) and clean_smiles[i + 1:i + 3] in ['Cl', 'Br']:
+                    backbone_bonds += 1
+                elif next_char in 'CNOSFIPcnos':
+                    backbone_bonds += 1
+            i += 1
+            continue
+        
+        # Check for atoms
+        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br']:
+            if not in_branch:
+                if prev_atom:
+                    # Implicit single bond
+                    backbone_bonds += 1
+                prev_atom = True
+            i += 2
+        elif char in 'CNOSFIPcnos':
+            if not in_branch:
+                if prev_atom and i > 0:
+                    prev_char = clean_smiles[i-1]
+                    # Count implicit bond if no explicit bond symbol
+                    if prev_char not in '-=#:':
+                        backbone_bonds += 1
+                prev_atom = True
+            i += 1
+        else:
+            # Skip other characters (numbers, etc.)
+            i += 1
+    
+    return backbone_bonds
+
 def extract_molecular_features(smiles):
     """Extract features from SMILES string without external libraries"""
     features = {}
@@ -298,6 +375,9 @@ def extract_molecular_features(smiles):
     
     # Main branch atom ratio (main branch atoms / total heavy atoms)
     features['main_branch_atom_ratio'] = round(features['main_branch_atoms'] / max(features['heavy_atom_count'], 1), 3)
+    
+    # Backbone bonds count
+    features['backbone_bonds'] = calculate_backbone_bonds(smiles)
     
     return features
 
