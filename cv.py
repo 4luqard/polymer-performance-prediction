@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
-from utils.diagnostics import CVDiagnostics
+from src.diagnostics import CVDiagnostics
 from config import LIGHTGBM_PARAMS
 
 # PCA variance threshold - should match the one in model.py

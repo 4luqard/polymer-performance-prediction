@@ -1,120 +1,118 @@
 # NeurIPS Open Polymer Prediction 2025
 
-This repository contains a LightGBM-based solution for the NeurIPS 2025 Open Polymer Prediction competition, featuring target-specific feature selection and comprehensive molecular feature engineering.
+A machine learning solution for predicting polymer properties from SMILES molecular representations.
 
 ## Competition Overview
 
-- **Task**: Multi-target regression to predict 5 polymer properties from SMILES molecular representations
-- **Target Properties**:
-  - **Tg**: Glass transition temperature (K)
-  - **FFV**: Fractional free volume (dimensionless)
-  - **Tc**: Crystallization temperature (K)
-  - **Density**: Material density (g/cm³)
-  - **Rg**: Radius of gyration (Å)
+This project tackles the NeurIPS 2025 Open Polymer Prediction challenge, which involves predicting 5 key polymer properties:
+- **Tg**: Glass transition temperature (K)
+- **FFV**: Fractional free volume (dimensionless)
+- **Tc**: Crystallization temperature (K)  
+- **Density**: Material density (g/cm³)
+- **Rg**: Radius of gyration (Å)
 
-## Key Challenge
+## Key Features
 
-The training data has significant missing values (~91% of samples have only 1 target value), making this a challenging multi-target prediction problem with partial labels.
+### Advanced Feature Engineering
+- **52 molecular features** extracted from SMILES representations
+- **Target-specific feature selection** for optimal performance
+- Custom features including:
+  - Molecular weight estimation
+  - Backbone bonds counting
+  - Average bond length calculation
+  - Radius of gyration estimation
+  - Van der Waals volume
+  - Density estimation
+
+### Model Architecture
+- **LightGBM gradient boosting** for non-linear relationships
+- Separate models for each target property
+- Handles missing values effectively (~91% of samples have only 1 target)
+- Integrates supplementary datasets for improved training
+
+### Performance
+- Cross-validation score: **0.0542** (competition metric)
+- No PCA dimensionality reduction (tested but degrades performance)
+- Multi-seed validation for robust evaluation
 
 ## Project Structure
 
 ```
-├── model.py                   # Main model implementation with LightGBM
-├── cv.py                      # Cross-validation functions
-├── config.py                  # LightGBM configuration parameters
-├── src/                       # Source code modules
-│   └── competition_metric.py  # Competition evaluation metric
-├── scripts/                   # Utility scripts
-│   ├── submit_to_kaggle.py    # Kaggle submission script
-│   └── visualize_lgbm_trees.py # LightGBM tree visualization
-├── utils/                     # Utility functions
-│   ├── diagnostics/           # CV diagnostics utilities
-│   └── test/                  # Model testing utilities
-├── data/                      # Competition data
-│   └── raw/                   # Original data files
-│       ├── train.csv          # Training data with partial targets
-│       ├── test.csv           # Test data (SMILES only)
-│       └── train_supplement/  # Additional training datasets
-└── output/                    # Model outputs
-    ├── submission.csv         # Competition submission
-    └── lgbm_trees/           # Tree visualizations
+├── data/                    # Competition data
+│   └── raw/                 
+│       ├── train.csv        # Training data with partial targets
+│       ├── test.csv         # Test data for predictions
+│       └── train_supplement/# Additional training datasets
+├── src/                     # Source code modules
+│   ├── competition_metric.py# Official competition metric
+│   └── diagnostics/         # CV diagnostics tools
+├── scripts/                 # Utility scripts
+│   ├── submit_to_kaggle.py  # Kaggle submission script
+│   └── visualize_lgbm_trees.py # Tree visualization
+├── output/                  # Model outputs
+│   └── submission.csv       # Competition submission file
+├── model.py                 # Main model implementation
+├── cv.py                    # Cross-validation functions
+├── config.py                # Model configuration
+├── FEATURES.md              # Detailed feature documentation
+└── README.md                # This file
 ```
 
-## Model Approach
+## Usage
 
-- **Algorithm**: LightGBM gradient boosting with target-specific models
-- **Features**: Comprehensive molecular features extracted from SMILES:
-  - Atom counts by type (C, N, O, S, F, Cl, Br, I, P) and aromaticity
-  - Bond counts (single, double, triple, aromatic)
-  - Structural features (rings, branches, chiral centers)
-  - Functional group indicators (carbonyl, ether, amine, sulfone, ester, amide)
-  - Molecular weight and complexity metrics
-  - Van der Waals volume and density estimation
-  - Main branch atom analysis
-  - Polymer-specific patterns (phenyl, cyclohexyl groups)
-  - FFV (Fractional Free Volume) estimation
-  - Dataset source indicator (new_sim feature)
-- **Cross-validation**: Multi-seed CV (seeds: 42, 123, 456) with competition metric
-- **Current Performance**: CV score of 0.0540 (+/- 0.0021)
-
-## Quick Start
-
-1. Install dependencies:
+### Training and Prediction
 ```bash
-pip install --user pandas numpy scikit-learn lightgbm rdkit
-```
-
-2. Download competition data (requires Kaggle API):
-```bash
-kaggle competitions download -c neurips-open-polymer-prediction-2025 -p data/
-cd data/raw && unzip neurips-open-polymer-prediction-2025.zip
-```
-
-3. Run the model:
-```bash
-# For training and submission
+# Run full training and generate submission
 python model.py
 
-# For cross-validation only
+# Run cross-validation only
 python model.py --cv
 
-# Without supplementary data
+# Use Ridge model instead of LightGBM
+python model.py --model ridge
+
+# Exclude supplementary datasets
 python model.py --no-supplement
 ```
 
-4. Visualize decision trees:
-```bash
-python scripts/visualize_lgbm_trees.py
-```
+### Feature Importance
+See [FEATURES.md](FEATURES.md) for detailed feature rankings and descriptions.
 
-## Key Implementation Details
+## Requirements
+- Python 3.8+
+- pandas
+- numpy 
+- scikit-learn
+- lightgbm
+- kaggle (for submissions)
 
-- **Target-specific feature selection**: Optimized atom features for each target:
-  - Tg: num_C, num_n (aromatic nitrogen)
-  - FFV: num_S, num_n
-  - Tc: num_C, num_S
-  - Density: num_Cl, num_Br
-  - Rg: num_F, num_Cl
-- **Separate models**: Individual LightGBM model trained for each target
-- **Missing value handling**: Models trained only on samples with available target values
-- **Supplementary datasets**: Integrates dataset1 from train_supplement (renaming TC_mean to Tc)
-- **Feature engineering**: 49 total features including molecular descriptors and structural patterns
+## Model Details
 
-## Configuration
+### LightGBM Parameters
+- Objective: regression (MAE)
+- Max depth: -1 (no limit)
+- Num leaves: 31
+- Estimators: 200
+- Learning rate: 0.1
+- Feature fraction: 0.9
+- Bagging fraction: 0.8
 
-LightGBM parameters (defined in `config.py`):
-- `objective`: regression
-- `metric`: mae
-- `boosting_type`: gbdt
-- `max_depth`: -1 (no limit)
-- `num_leaves`: 31
-- `n_estimators`: 200
-- `learning_rate`: 0.1
-- `feature_fraction`: 0.9
-- `bagging_fraction`: 0.8
+### Feature Selection Strategy
+Different atom count features are selected for each target based on importance:
+- **Tg**: num_C, num_n
+- **FFV**: num_S, num_n
+- **Tc**: num_C, num_S
+- **Density**: num_Cl, num_Br
+- **Rg**: num_F, num_Cl
 
-## Missing Value Patterns
+## Results Summary
 
-- Each polymer typically has only 1 out of 5 target values present
-- Missing patterns show strong correlations (e.g., Density & Rg almost always missing/present together)
-- Missing values are due to measurement limitations in molecular dynamics simulations
+| Model Configuration | CV Score |
+|-------------------|----------|
+| LightGBM (no PCA) | 0.0542   |
+| Ridge (no PCA)    | 0.0674   |
+| LightGBM + PCA    | 0.0598   |
+| Ridge + PCA       | 0.0687   |
+
+## License
+MIT License - see [LICENSE](LICENSE) file for details.

@@ -30,7 +30,7 @@ PCA_VARIANCE_THRESHOLD = None
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
     from src.competition_metric import neurips_polymer_metric
-    from utils.diagnostics import CVDiagnostics
+    from src.diagnostics import CVDiagnostics
     from cv import perform_cross_validation, perform_multi_seed_cv
     from config import LIGHTGBM_PARAMS
 
