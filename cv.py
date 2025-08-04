@@ -150,6 +150,16 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         lgb_params = LIGHTGBM_PARAMS.copy()
                         lgb_params['random_state'] = random_seed  # Override seed for CV
                         model = lgb.LGBMRegressor(**lgb_params)
+                        
+                        # For LightGBM, create a validation split from training data
+                        from sklearn.model_selection import train_test_split
+                        if len(X_target_final) > 20:  # Only split if we have enough data
+                            X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
+                                X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
+                            )
+                            model.fit(X_tr, y_tr, eval_set=[(X_val_inner, y_val_inner)], callbacks=[lgb.log_evaluation(0)])
+                        else:
+                            model.fit(X_target_final, y_target_complete)
                     else:
                         # Ridge model with target-specific alpha
                         target_alphas = {
@@ -161,8 +171,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         }
                         alpha = target_alphas.get(target, 1.0)
                         model = Ridge(alpha=alpha, random_state=random_seed)
-                    
-                    model.fit(X_target_final, y_target_complete)
+                        model.fit(X_target_final, y_target_complete)
                     
                     # Initialize predictions with median for all samples
                     fold_predictions[:, i] = y_fold_train[target].median()
