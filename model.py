@@ -27,6 +27,10 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 # PCA variance threshold - set to None to disable PCA
 PCA_VARIANCE_THRESHOLD = None
 
+# Autoencoder settings - set to True to use autoencoder instead of PCA
+USE_AUTOENCODER = False
+AUTOENCODER_LATENT_DIM = 20  # Number of latent dimensions
+
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
     from src.competition_metric import neurips_polymer_metric
@@ -532,6 +536,59 @@ def prepare_features(df):
     features_df = pd.DataFrame(features_list)
     return features_df
 
+def apply_autoencoder(X_train, X_test=None, latent_dim=20, epochs=100, batch_size=32):
+    """
+    Apply autoencoder for dimensionality reduction.
+    
+    Args:
+        X_train: Training data (n_samples, n_features)
+        X_test: Test data (optional)
+        latent_dim: Number of dimensions in the latent space
+        epochs: Number of training epochs
+        batch_size: Batch size for training
+    
+    Returns:
+        If X_test is None: X_train_encoded
+        If X_test is provided: (X_train_encoded, X_test_encoded)
+    
+    TODO: Implement your autoencoder here
+    """
+    # TODO: Import necessary libraries (e.g., tensorflow, pytorch)
+    
+    # TODO: Define encoder architecture
+    # Example structure:
+    # input_dim = X_train.shape[1]
+    # encoder = Sequential([
+    #     Dense(128, activation='relu', input_shape=(input_dim,)),
+    #     Dense(64, activation='relu'),
+    #     Dense(latent_dim, activation='linear')
+    # ])
+    
+    # TODO: Define decoder architecture
+    # decoder = Sequential([
+    #     Dense(64, activation='relu', input_shape=(latent_dim,)),
+    #     Dense(128, activation='relu'),
+    #     Dense(input_dim, activation='linear')
+    # ])
+    
+    # TODO: Combine into autoencoder model
+    # autoencoder = Model(inputs=encoder_input, outputs=decoder_output)
+    
+    # TODO: Compile and train the model
+    # autoencoder.compile(optimizer='adam', loss='mse')
+    # autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
+    
+    # TODO: Extract encoder and apply to data
+    # X_train_encoded = encoder.predict(X_train)
+    
+    # For now, return original data (replace with actual implementation)
+    print("Warning: Autoencoder not implemented yet, returning original data")
+    if X_test is None:
+        return X_train
+    else:
+        return X_train, X_test
+
+
 def select_features_for_target(X, target):
     """Select features for a specific target"""
     # Get all non-atom features
@@ -734,9 +791,12 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 scaler = StandardScaler()
                 X_target_scaled = scaler.fit_transform(X_target_complete)
                 
-                # Apply PCA if enabled
+                # Apply dimensionality reduction if enabled
                 pca = None
-                if PCA_VARIANCE_THRESHOLD is not None:
+                if USE_AUTOENCODER:
+                    print(f"  Applying autoencoder: {X_target_scaled.shape[1]} features -> {AUTOENCODER_LATENT_DIM} dimensions")
+                    X_target_final = apply_autoencoder(X_target_scaled, latent_dim=AUTOENCODER_LATENT_DIM)
+                elif PCA_VARIANCE_THRESHOLD is not None:
                     pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=42)
                     X_target_pca = pca.fit_transform(X_target_scaled)
                     print(f"  PCA: {X_target_scaled.shape[1]} features -> {X_target_pca.shape[1]} components")
@@ -752,8 +812,10 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 X_test_imputed = imputer.transform(X_test_selected)
                 X_test_scaled = scaler.transform(X_test_imputed)
                 
-                # Apply PCA to test set if enabled
-                if pca is not None:
+                # Apply dimensionality reduction to test set if enabled
+                if USE_AUTOENCODER:
+                    _, X_test_final = apply_autoencoder(X_target_scaled, X_test_scaled, latent_dim=AUTOENCODER_LATENT_DIM)
+                elif pca is not None:
                     X_test_final = pca.transform(X_test_scaled)
                 else:
                     X_test_final = X_test_scaled
