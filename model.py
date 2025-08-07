@@ -18,6 +18,27 @@ import re
 import sys
 import os
 import math
+
+# TensorFlow/Keras imports for autoencoder
+try:
+    # Try standalone Keras first
+    import keras
+    from keras.models import Sequential, Model
+    from keras.layers import Dense, Input
+    KERAS_AVAILABLE = True
+    print("Using standalone Keras")
+except ImportError:
+    # Fall back to TensorFlow Keras
+    try:
+        import tensorflow as tf
+        from tensorflow import keras
+        from tensorflow.keras.models import Sequential, Model
+        from tensorflow.keras.layers import Dense, Input
+        KERAS_AVAILABLE = True
+        print("Using TensorFlow Keras")
+    except ImportError:
+        KERAS_AVAILABLE = False
+        print("Warning: Neither Keras nor TensorFlow available, autoencoder will not work")
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -29,7 +50,7 @@ PCA_VARIANCE_THRESHOLD = None
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
 USE_AUTOENCODER = False
-AUTOENCODER_LATENT_DIM = 20  # Number of latent dimensions
+AUTOENCODER_LATENT_DIM = 30  # Number of latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -536,7 +557,7 @@ def prepare_features(df):
     features_df = pd.DataFrame(features_list)
     return features_df
 
-def apply_autoencoder(X_train, X_test=None, latent_dim=20, epochs=100, batch_size=32):
+def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_size=32):
     """
     Apply autoencoder for dimensionality reduction.
     
@@ -551,42 +572,57 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=20, epochs=100, batch_siz
         If X_test is None: X_train_encoded
         If X_test is provided: (X_train_encoded, X_test_encoded)
     
-    TODO: Implement your autoencoder here
     """
-    # TODO: Import necessary libraries (e.g., tensorflow, pytorch)
+    if not KERAS_AVAILABLE:
+        print("Keras/TensorFlow not available, returning original data")
+        if X_test is None:
+            return X_train
+        else:
+            return X_train, X_test
     
-    # TODO: Define encoder architecture
+    # Define encoder architecture
     # Example structure:
+    input_dim = X_train.shape[1]
+    encoder = Sequential([
+        Dense(128, activation='leaky_relu', input_shape=(input_dim,)),
+        Dense(64, activation='leaky_relu'),
+        Dense(32, activation='leaky_relu')
+    ])
     # input_dim = X_train.shape[1]
-    # encoder = Sequential([
-    #     Dense(128, activation='relu', input_shape=(input_dim,)),
-    #     Dense(64, activation='relu'),
-    #     Dense(latent_dim, activation='linear')
-    # ])
+    # encoded = keras.Input(shape=(input_dim,))
+    # encoder = Dense(input_dim/2, activation='linear', input_shape=(input_dim))
+
+    # Define decoder architecture
+    decoder = Sequential([
+        Dense(64, activation='linear', input_shape=(32,)),
+        Dense(128, activation='linear'),
+        Dense(input_dim, activation='linear')
+    ])
+    # decoded = keras.Input(shape=(input_dim/2,))
+    # decoder = Dense(input_dim, activation='linear', input_shape=(input_dim/2))
+
+    # Combine into autoencoder model
+    # Create input layer
+    input_layer = Input(shape=(input_dim,))
+    # Pass through encoder
+    encoded = encoder(input_layer)
+    # Pass through decoder
+    decoded = decoder(encoded)
+    # Create autoencoder model
+    autoencoder = Model(inputs=input_layer, outputs=decoded)
+
+    # Compile and train the model
+    autoencoder.compile(optimizer='adam', loss='mae')
+    autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
     
-    # TODO: Define decoder architecture
-    # decoder = Sequential([
-    #     Dense(64, activation='relu', input_shape=(latent_dim,)),
-    #     Dense(128, activation='relu'),
-    #     Dense(input_dim, activation='linear')
-    # ])
+    # Extract encoder and apply to data
+    X_train_encoded = encoder.predict(X_train)
     
-    # TODO: Combine into autoencoder model
-    # autoencoder = Model(inputs=encoder_input, outputs=decoder_output)
-    
-    # TODO: Compile and train the model
-    # autoencoder.compile(optimizer='adam', loss='mse')
-    # autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
-    
-    # TODO: Extract encoder and apply to data
-    # X_train_encoded = encoder.predict(X_train)
-    
-    # For now, return original data (replace with actual implementation)
-    print("Warning: Autoencoder not implemented yet, returning original data")
     if X_test is None:
-        return X_train
+        return X_train_encoded
     else:
-        return X_train, X_test
+        X_test_encoded = encoder.predict(X_test)
+        return X_train_encoded, X_test_encoded
 
 
 def select_features_for_target(X, target):
