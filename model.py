@@ -584,9 +584,9 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_siz
     # Example structure:
     input_dim = X_train.shape[1]
     encoder = Sequential([
-        Dense(128, activation='leaky_relu', input_shape=(input_dim,)),
-        Dense(64, activation='leaky_relu'),
-        Dense(32, activation='leaky_relu')
+        Dense(32, activation='leaky_relu', input_shape=(input_dim,)),
+        Dense(16, activation='leaky_relu'),
+        Dense(10, activation='leaky_relu')
     ])
     # input_dim = X_train.shape[1]
     # encoded = keras.Input(shape=(input_dim,))
@@ -594,8 +594,8 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_siz
 
     # Define decoder architecture
     decoder = Sequential([
-        Dense(64, activation='linear', input_shape=(32,)),
-        Dense(128, activation='linear'),
+        Dense(16, activation='leaky_relu', input_shape=(10,)),
+        Dense(32, activation='leaky_relu'),
         Dense(input_dim, activation='linear')
     ])
     # decoded = keras.Input(shape=(input_dim/2,))
