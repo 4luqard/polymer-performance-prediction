@@ -24,24 +24,26 @@ from config import LIGHTGBM_PARAMS
 PCA_VARIANCE_THRESHOLD = None
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm'):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True):
     """
     Perform cross-validation for separate models approach
     
     Args:
-        X: Features (numpy array or DataFrame)
+        X: Features (numpy array or DataFrame) - should be preprocessed if preprocessed=True
         y: Targets (DataFrame with multiple columns)
         cv_folds: Number of cross-validation folds
         target_columns: List of target column names
         enable_diagnostics: Enable diagnostic tracking
         random_seed: Random seed for reproducibility
         model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
+        preprocessed: Whether data is already preprocessed (default: True)
     
     Returns:
         Dictionary with CV scores
     """
-    # Import select_features_for_target from model
-    from model import select_features_for_target
+    # Import select_features_for_target from model only if not preprocessed
+    if not preprocessed:
+        from model import select_features_for_target
     
     if target_columns is None:
         target_columns = y.columns.tolist()
@@ -84,39 +86,61 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
             if mask.sum() > 0:
                 # Get samples with valid target values
                 mask_indices = np.where(mask)[0]
-                # Select features for this target
-                X_fold_train_selected = select_features_for_target(X_fold_train, target)
-                X_fold_val_selected = select_features_for_target(X_fold_val, target)
                 
-                X_target = X_fold_train_selected.iloc[mask_indices] if hasattr(X_fold_train_selected, 'iloc') else X_fold_train_selected[mask_indices]
-                y_target = y_fold_train[target].iloc[mask_indices]
-                
-                # Further filter to only keep rows with no missing features
-                if isinstance(X_target, pd.DataFrame):
-                    feature_complete_mask = ~X_target.isnull().any(axis=1)
+                if preprocessed:
+                    # Use preprocessed data directly
+                    X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
+                    y_target = y_fold_train[target].iloc[mask_indices]
+                    
+                    # Data is already complete and preprocessed
+                    X_target_final = X_target
+                    y_target_complete = y_target
                 else:
-                    # For numpy arrays
-                    feature_complete_mask = ~np.isnan(X_target).any(axis=1)
-                
-                X_target_complete = X_target[feature_complete_mask]
-                y_target_complete = y_target[feature_complete_mask]
-                
-                if len(X_target_complete) > 0:
-                    # Scale features (no imputation needed)
-                    scaler = StandardScaler()
-                    X_target_scaled = scaler.fit_transform(X_target_complete)
+                    # Select features for this target
+                    X_fold_train_selected = select_features_for_target(X_fold_train, target)
+                    X_fold_val_selected = select_features_for_target(X_fold_val, target)
                     
-                    # Apply PCA if enabled
-                    pca = None
-                    if PCA_VARIANCE_THRESHOLD is not None:
-                        pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=random_seed)
-                        X_target_pca = pca.fit_transform(X_target_scaled)
-                        X_target_final = X_target_pca
+                    X_target = X_fold_train_selected.iloc[mask_indices] if hasattr(X_fold_train_selected, 'iloc') else X_fold_train_selected[mask_indices]
+                    y_target = y_fold_train[target].iloc[mask_indices]
+                    
+                    # Further filter to only keep rows with no missing features
+                    if isinstance(X_target, pd.DataFrame):
+                        feature_complete_mask = ~X_target.isnull().any(axis=1)
                     else:
-                        X_target_final = X_target_scaled
+                        # For numpy arrays
+                        feature_complete_mask = ~np.isnan(X_target).any(axis=1)
                     
-                    # For validation set, apply same filtering as training
-                    # Only evaluate on samples with non-missing target values
+                    X_target_complete = X_target[feature_complete_mask]
+                    y_target_complete = y_target[feature_complete_mask]
+                    
+                    if len(X_target_complete) > 0:
+                        # Scale features (no imputation needed)
+                        scaler = StandardScaler()
+                        X_target_scaled = scaler.fit_transform(X_target_complete)
+                        
+                        # Apply PCA if enabled
+                        pca = None
+                        if PCA_VARIANCE_THRESHOLD is not None:
+                            pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=random_seed)
+                            X_target_pca = pca.fit_transform(X_target_scaled)
+                            X_target_final = X_target_pca
+                        else:
+                            X_target_final = X_target_scaled
+                    
+                if preprocessed:
+                    # For preprocessed data, just filter by target availability
+                    val_mask = ~y_fold_val[target].isna()
+                    val_mask_indices = np.where(val_mask)[0]
+                    
+                    if len(val_mask_indices) > 0:
+                        X_val_final = X_fold_val.iloc[val_mask_indices] if hasattr(X_fold_val, 'iloc') else X_fold_val[val_mask_indices]
+                        val_complete_indices = val_mask_indices
+                    else:
+                        X_val_final = None
+                        val_complete_indices = np.array([])
+                    X_val_complete = None  # Initialize for non-preprocessed case
+                else:
+                    # For non-preprocessed data, apply the same preprocessing as training
                     val_mask = ~y_fold_val[target].isna()
                     val_mask_indices = np.where(val_mask)[0]
                     X_val_complete = None
@@ -143,6 +167,8 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                                 X_val_final = pca.transform(X_val_scaled)
                             else:
                                 X_val_final = X_val_scaled
+                
+                if len(X_target_final) > 0:
                     
                     # Train model based on type
                     if model_type == 'lightgbm':
@@ -177,7 +203,12 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     fold_predictions[:, i] = y_fold_train[target].median()
                     
                     # Make predictions only for validation samples with complete features
-                    if len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
+                    if preprocessed and len(val_mask_indices) > 0 and X_val_final is not None:
+                        predictions = model.predict(X_val_final)
+                        # Map predictions back to original validation indices
+                        for idx, pred in zip(val_complete_indices, predictions):
+                            fold_predictions[idx, i] = pred
+                    elif not preprocessed and len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
                         predictions = model.predict(X_val_final)
                         # Map predictions back to original validation indices
                         for idx, pred in zip(val_complete_indices, predictions):
@@ -261,7 +292,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     }
 
 
-def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm'):
+def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm', preprocessed=True):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -297,7 +328,8 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
                                         target_columns=target_columns, 
                                         enable_diagnostics=enable_diagnostics,
                                         random_seed=seed,
-                                        model_type=model_type)
+                                        model_type=model_type,
+                                        preprocessed=preprocessed)
         
         if result is not None:
             seed_results[seed] = result

@@ -728,6 +728,55 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
+    # Apply scaling and dimensionality reduction on the full dataset
+    print("\n=== Preprocessing Full Dataset ===")
+    
+    # Combine train and test for consistent preprocessing
+    X_combined = pd.concat([X_train, X_test], axis=0)
+    train_size = len(X_train)
+    
+    # Drop columns with all NaN values
+    nan_cols = X_combined.columns[X_combined.isna().all()]
+    if len(nan_cols) > 0:
+        print(f"Dropping {len(nan_cols)} columns with all NaN values")
+        X_combined = X_combined.drop(columns=nan_cols)
+    
+    # Impute missing values with zeros (for consistency)
+    print("Imputing missing values with zeros...")
+    from sklearn.impute import SimpleImputer
+    imputer = SimpleImputer(strategy='constant', fill_value=0)
+    X_combined_imputed = imputer.fit_transform(X_combined)
+    
+    # Scale features
+    print("Scaling features...")
+    global_scaler = StandardScaler()
+    X_combined_scaled = global_scaler.fit_transform(X_combined_imputed)
+    
+    # Apply dimensionality reduction if enabled
+    global_pca = None
+    if USE_AUTOENCODER:
+        print(f"Applying autoencoder: {X_combined_scaled.shape[1]} features -> {AUTOENCODER_LATENT_DIM} dimensions")
+        # Split back to train/test for autoencoder
+        X_train_scaled = X_combined_scaled[:train_size]
+        X_test_scaled = X_combined_scaled[train_size:]
+        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, latent_dim=AUTOENCODER_LATENT_DIM)
+        # Combine back
+        X_combined_final = np.vstack([X_train_reduced, X_test_reduced])
+    elif PCA_VARIANCE_THRESHOLD is not None:
+        print(f"Applying PCA with variance threshold {PCA_VARIANCE_THRESHOLD}...")
+        global_pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=42)
+        X_combined_final = global_pca.fit_transform(X_combined_scaled)
+        print(f"PCA: {X_combined_scaled.shape[1]} features -> {X_combined_final.shape[1]} components")
+        print(f"Variance preserved: {global_pca.explained_variance_ratio_.sum():.4f}")
+    else:
+        X_combined_final = X_combined_scaled
+    
+    # Split back to train and test
+    X_train_preprocessed = pd.DataFrame(X_combined_final[:train_size])
+    X_test_preprocessed = pd.DataFrame(X_combined_final[train_size:])
+    
+    print(f"Final dimensions: {X_train_preprocessed.shape}")
+    
     # Run cross-validation if requested (but not on Kaggle)
     if cv_only:
         if IS_KAGGLE:
@@ -741,14 +790,14 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 print("** Running CV WITH supplementary datasets **")
             
             # Run multi-seed CV with target-specific features (current implementation)
-            multi_seed_result = perform_multi_seed_cv(X_train, y_train, cv_folds=5, 
+            multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5, 
                                                      target_columns=target_columns,
                                                      enable_diagnostics=False,
                                                      model_type=model_type)
             
             # Also run single seed CV for comparison if needed
             print("\n=== Single Seed Comparison ===")
-            single_seed_result = perform_cross_validation(X_train, y_train, cv_folds=5,
+            single_seed_result = perform_cross_validation(X_train_preprocessed, y_train, cv_folds=5,
                                                          target_columns=target_columns,
                                                          enable_diagnostics=False,
                                                          random_seed=42,
@@ -808,91 +857,47 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
         
         if n_samples > 0:
-            # Select features for this target
-            X_train_selected = select_features_for_target(X_train, target)
-            X_test_selected = select_features_for_target(X_test, target)
-            
-            print(f"  Using {len(X_train_selected.columns)} features (reduced from {len(X_train.columns)})")
-            
-            # Get samples with valid target values
-            X_target = X_train_selected[mask]
+            # Use preprocessed data directly
+            X_target = X_train_preprocessed[mask]
             y_target = y_train[target][mask]
             
-            # Further filter to only keep rows with no missing features
-            feature_complete_mask = ~X_target.isnull().any(axis=1)
-            X_target_complete = X_target[feature_complete_mask]
-            y_target_complete = y_target[feature_complete_mask]
+            print(f"  Using all {X_target.shape[1]} preprocessed features")
+            print(f"  Training samples: {len(X_target)}")
             
-            print(f"  Complete samples (no missing features): {len(X_target_complete)} ({len(X_target_complete)/len(y_train)*100:.1f}%)")
+            # No need for further preprocessing - data is already scaled and reduced
+            X_target_final = X_target
+            X_test_final = X_test_preprocessed
             
-            if len(X_target_complete) > 0:
-                # Scale features (no imputation needed)
-                scaler = StandardScaler()
-                X_target_scaled = scaler.fit_transform(X_target_complete)
-                
-                # Apply dimensionality reduction if enabled
-                pca = None
-                if USE_AUTOENCODER:
-                    print(f"  Applying autoencoder: {X_target_scaled.shape[1]} features -> {AUTOENCODER_LATENT_DIM} dimensions")
-                    X_target_final = apply_autoencoder(X_target_scaled, latent_dim=AUTOENCODER_LATENT_DIM)
-                elif PCA_VARIANCE_THRESHOLD is not None:
-                    pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=42)
-                    X_target_pca = pca.fit_transform(X_target_scaled)
-                    print(f"  PCA: {X_target_scaled.shape[1]} features -> {X_target_pca.shape[1]} components")
-                    print(f"  Variance preserved: {pca.explained_variance_ratio_.sum():.4f}")
-                    X_target_final = X_target_pca
-                else:
-                    X_target_final = X_target_scaled
-                
-                # For test set, we need to handle missing values somehow
-                # Use zero imputation only for test set predictions
-                imputer = SimpleImputer(strategy='constant', fill_value=0)
-                imputer.fit(X_target_complete)  # Fit on complete training data
-                X_test_imputed = imputer.transform(X_test_selected)
-                X_test_scaled = scaler.transform(X_test_imputed)
-                
-                # Apply dimensionality reduction to test set if enabled
-                if USE_AUTOENCODER:
-                    _, X_test_final = apply_autoencoder(X_target_scaled, X_test_scaled, latent_dim=AUTOENCODER_LATENT_DIM)
-                elif pca is not None:
-                    X_test_final = pca.transform(X_test_scaled)
-                else:
-                    X_test_final = X_test_scaled
-                
-                # Train model for this target
-                if model_type == 'lightgbm':
-                    model = lgb.LGBMRegressor(**lgb_params)
-                    # Split data for validation to track overfitting
-                    X_tr, X_val, y_tr, y_val = train_test_split(
-                        X_target_final, y_target_complete, 
-                        test_size=0.2, random_state=42
-                    )
-                    # Train with validation data to see training progress
-                    model.fit(
-                        X_tr, y_tr,
-                        eval_set=[(X_tr, y_tr), (X_val, y_val)],
-                        eval_names=['train', 'valid'],
-                        eval_metric='mae',
-                        callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
-                    )
-                    # Get final MAE scores from eval results
-                    train_mae = model.evals_result_['train']['l1'][-1]
-                    val_mae = model.evals_result_['valid']['l1'][-1]
-                    print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
-                else:
-                    # Use Ridge with target-specific alpha
-                    alpha = target_alphas.get(target, 1.0)
-                    print(f"  Using alpha={alpha}")
-                    model = Ridge(alpha=alpha, random_state=42)
-                    model.fit(X_target_final, y_target_complete)
-                
-                # Make predictions
-                predictions[:, i] = model.predict(X_test_final)
-                print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+            # Train model for this target
+            if model_type == 'lightgbm':
+                model = lgb.LGBMRegressor(**lgb_params)
+                # Split data for validation to track overfitting
+                X_tr, X_val, y_tr, y_val = train_test_split(
+                    X_target_final, y_target, 
+                    test_size=0.2, random_state=42
+                )
+                # Train with validation data to see training progress
+                model.fit(
+                    X_tr, y_tr,
+                    eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                    eval_names=['train', 'valid'],
+                    eval_metric='mae',
+                    callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
+                )
+                # Get final MAE scores from eval results
+                train_mae = model.evals_result_['train']['l1'][-1]
+                val_mae = model.evals_result_['valid']['l1'][-1]
+                print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
             else:
-                # No complete samples available, use median
-                predictions[:, i] = y_train[target].median()
-                print(f"  No complete samples available, using median: {predictions[:, i][0]:.4f}")
+                # Use Ridge with target-specific alpha
+                alpha = target_alphas.get(target, 1.0)
+                print(f"  Using alpha={alpha}")
+                model = Ridge(alpha=alpha, random_state=42)
+                model.fit(X_target_final, y_target)
+            
+            # Make predictions
+            predictions[:, i] = model.predict(X_test_final)
+            print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
         else:
             # Use median of available values if no samples
             predictions[:, i] = y_train[target].median()
