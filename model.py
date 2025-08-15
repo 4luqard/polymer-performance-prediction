@@ -581,25 +581,24 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_siz
             return X_train, X_test
     
     # Define encoder architecture
-    # Example structure:
     input_dim = X_train.shape[1]
-    encoder = Sequential([
-        Dense(32, activation='leaky_relu', input_shape=(input_dim,)),
-        Dense(16, activation='leaky_relu'),
-        Dense(10, activation='leaky_relu')
-    ])
+    # encoder = Sequential([
+    #     Dense(32, activation='leaky_relu', input_shape=(input_dim,)),
+    #     Dense(16, activation='leaky_relu'),
+    #     Dense(10, activation='leaky_relu')
+    # ])
     # input_dim = X_train.shape[1]
     # encoded = keras.Input(shape=(input_dim,))
-    # encoder = Dense(input_dim/2, activation='linear', input_shape=(input_dim))
+    encoder = Dense(32, activation='relu', input_shape=(input_dim,))
 
     # Define decoder architecture
-    decoder = Sequential([
-        Dense(16, activation='linear', input_shape=(10,)),
-        Dense(32, activation='linear'),
-        Dense(input_dim, activation='linear')
-    ])
+    # decoder = Sequential([
+    #     Dense(16, activation='linear', input_shape=(10,)),
+    #     Dense(32, activation='linear'),
+    #     Dense(input_dim, activation='linear')
+    # ])
     # decoded = keras.Input(shape=(input_dim/2,))
-    # decoder = Dense(input_dim, activation='linear', input_shape=(input_dim/2))
+    decoder = Dense(input_dim, activation='relu', input_shape=(32,))
 
     # Combine into autoencoder model
     # Create input layer
@@ -615,13 +614,16 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_siz
     autoencoder.compile(optimizer='adam', loss='mae')
     autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
     
+    # Create encoder model for extracting latent representations
+    encoder_model = Model(inputs=input_layer, outputs=encoded)
+    
     # Extract encoder and apply to data
-    X_train_encoded = encoder.predict(X_train)
+    X_train_encoded = encoder_model.predict(X_train)
     
     if X_test is None:
         return X_train_encoded
     else:
-        X_test_encoded = encoder.predict(X_test)
+        X_test_encoded = encoder_model.predict(X_test)
         return X_train_encoded, X_test_encoded
 
 
@@ -776,13 +778,14 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 'boosting_type': 'gbdt',
                 'max_depth': -1,
                 'num_leaves': 31,
-                'n_estimators': 200,
-                'learning_rate': 0.1,
+                'n_estimators': 2000,
+                'learning_rate': 0.001,
                 'feature_fraction': 0.9,
                 'bagging_fraction': 0.8,
                 'bagging_freq': 5,
                 'verbose': -1,
-                'random_state': 42
+                'random_state': 42,
+                'n_jobs': -1
             }
         else:
             lgb_params = LIGHTGBM_PARAMS.copy()
