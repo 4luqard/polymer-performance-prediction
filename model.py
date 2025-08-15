@@ -728,54 +728,50 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         print(f"{col}: median={y_train[col].median():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Apply scaling and dimensionality reduction on the full dataset
-    print("\n=== Preprocessing Full Dataset ===")
+    # Apply scaling and dimensionality reduction separately to avoid data leakage
+    print("\n=== Preprocessing Data ===")
     
-    # Combine train and test for consistent preprocessing
-    X_combined = pd.concat([X_train, X_test], axis=0)
-    train_size = len(X_train)
-    
-    # Drop columns with all NaN values
-    nan_cols = X_combined.columns[X_combined.isna().all()]
+    # Drop columns with all NaN values in training data
+    nan_cols = X_train.columns[X_train.isna().all()]
     if len(nan_cols) > 0:
         print(f"Dropping {len(nan_cols)} columns with all NaN values")
-        X_combined = X_combined.drop(columns=nan_cols)
+        X_train = X_train.drop(columns=nan_cols)
+        X_test = X_test.drop(columns=nan_cols)
     
-    # Impute missing values with zeros (for consistency)
+    # Impute missing values with zeros (fit on train, transform both)
     print("Imputing missing values with zeros...")
     from sklearn.impute import SimpleImputer
     imputer = SimpleImputer(strategy='constant', fill_value=0)
-    X_combined_imputed = imputer.fit_transform(X_combined)
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_test_imputed = imputer.transform(X_test)
     
-    # Scale features
+    # Scale features (fit on train, transform both)
     print("Scaling features...")
     global_scaler = StandardScaler()
-    X_combined_scaled = global_scaler.fit_transform(X_combined_imputed)
+    X_train_scaled = global_scaler.fit_transform(X_train_imputed)
+    X_test_scaled = global_scaler.transform(X_test_imputed)
     
     # Apply dimensionality reduction if enabled
     global_pca = None
     if USE_AUTOENCODER:
-        print(f"Applying autoencoder: {X_combined_scaled.shape[1]} features -> {AUTOENCODER_LATENT_DIM} dimensions")
-        # Split back to train/test for autoencoder
-        X_train_scaled = X_combined_scaled[:train_size]
-        X_test_scaled = X_combined_scaled[train_size:]
+        print(f"Applying autoencoder: {X_train_scaled.shape[1]} features -> {AUTOENCODER_LATENT_DIM} dimensions")
         X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, latent_dim=AUTOENCODER_LATENT_DIM)
-        # Combine back
-        X_combined_final = np.vstack([X_train_reduced, X_test_reduced])
+        X_train_preprocessed = pd.DataFrame(X_train_reduced)
+        X_test_preprocessed = pd.DataFrame(X_test_reduced)
     elif PCA_VARIANCE_THRESHOLD is not None:
         print(f"Applying PCA with variance threshold {PCA_VARIANCE_THRESHOLD}...")
         global_pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=42)
-        X_combined_final = global_pca.fit_transform(X_combined_scaled)
-        print(f"PCA: {X_combined_scaled.shape[1]} features -> {X_combined_final.shape[1]} components")
+        X_train_reduced = global_pca.fit_transform(X_train_scaled)
+        X_test_reduced = global_pca.transform(X_test_scaled)
+        print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
         print(f"Variance preserved: {global_pca.explained_variance_ratio_.sum():.4f}")
+        X_train_preprocessed = pd.DataFrame(X_train_reduced)
+        X_test_preprocessed = pd.DataFrame(X_test_reduced)
     else:
-        X_combined_final = X_combined_scaled
+        X_train_preprocessed = pd.DataFrame(X_train_scaled)
+        X_test_preprocessed = pd.DataFrame(X_test_scaled)
     
-    # Split back to train and test
-    X_train_preprocessed = pd.DataFrame(X_combined_final[:train_size])
-    X_test_preprocessed = pd.DataFrame(X_combined_final[train_size:])
-    
-    print(f"Final dimensions: {X_train_preprocessed.shape}")
+    print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
     
     # Run cross-validation if requested (but not on Kaggle)
     if cv_only:
