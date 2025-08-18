@@ -3,10 +3,10 @@ Configuration for LightGBM parameters - Single source of truth
 """
 
 LIGHTGBM_PARAMS = {
-    'objective': 'regression',
-    'metric': 'mae',  # Changed from rmse to mae for competition alignment
+    'objective': 'regression_l1',
+    'metric': 'mae',
     'boosting_type': 'gbdt',
-    'max_depth': -1,  # No limit
+    'max_depth': -1,
     'num_leaves': 31,
     'n_estimators': 200,
     'learning_rate': 0.1,

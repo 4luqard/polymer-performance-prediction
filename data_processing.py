@@ -11,26 +11,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 
-# TensorFlow/Keras imports for autoencoder
-try:
-    # Try standalone Keras first
-    import keras
-    from keras.models import Sequential, Model
-    from keras.layers import Dense, Input
-    KERAS_AVAILABLE = True
-    print("Using standalone Keras")
-except ImportError:
-    # Fall back to TensorFlow Keras
-    try:
-        import tensorflow as tf
-        from tensorflow import keras
-        from tensorflow.keras.models import Sequential, Model
-        from tensorflow.keras.layers import Dense, Input
-        KERAS_AVAILABLE = True
-        print("Using TensorFlow Keras")
-    except ImportError:
-        KERAS_AVAILABLE = False
-        print("Warning: Neither Keras nor TensorFlow available, autoencoder will not work")
+import keras
+from keras.models import Sequential, Model
+from keras.layers import Dense, Input
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -394,7 +377,7 @@ def extract_molecular_features(smiles):
     mol_weight += features['num_P'] * atomic_weights['P']
     
     # Round to 0.1 significance
-    features['molecular_weight'] = round(mol_weight, 1)
+    features['molecular_weight'] = round(mol_weight, 3)
     
     # Van der Waals volume calculation (heavy atoms only, no H estimation)
     # Van der Waals volumes in Angstrom^3 (Bondi, 1964)
@@ -427,7 +410,7 @@ def extract_molecular_features(smiles):
     vdw_volume += features['num_P'] * vdw_volumes['P']
     
     # Round to 0.1 significance  
-    features['vdw_volume'] = round(vdw_volume, 1)
+    features['vdw_volume'] = round(vdw_volume, 3)
     
     # Density estimate: molecular weight / volume
     # Convert from g/mol/Å³ to g/cm³
@@ -513,7 +496,7 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_size=32):
+def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_size=128):
     """
     Apply autoencoder for dimensionality reduction.
     
@@ -528,33 +511,26 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_siz
         If X_test is None: X_train_encoded
         If X_test is provided: (X_train_encoded, X_test_encoded)
     
-    """
-    if not KERAS_AVAILABLE:
-        print("Keras/TensorFlow not available, returning original data")
-        if X_test is None:
-            return X_train
-        else:
-            return X_train, X_test
-    
+    """    
     # Define encoder architecture
     input_dim = X_train.shape[1]
-    # encoder = Sequential([
-    #     Dense(32, activation='leaky_relu', input_shape=(input_dim,)),
-    #     Dense(16, activation='leaky_relu'),
-    #     Dense(10, activation='leaky_relu')
-    # ])
+    encoder = Sequential([
+        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='linear', input_shape=(input_dim,)),
+        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='linear'),
+        Dense(latent_dim, activation='linear')
+    ])
     # input_dim = X_train.shape[1]
     # encoded = keras.Input(shape=(input_dim,))
-    encoder = Dense(32, activation='relu', input_shape=(input_dim,))
+    # encoder = Dense(32, activation='relu', input_shape=(input_dim,))
 
     # Define decoder architecture
-    # decoder = Sequential([
-    #     Dense(16, activation='linear', input_shape=(10,)),
-    #     Dense(32, activation='linear'),
-    #     Dense(input_dim, activation='linear')
-    # ])
+    decoder = Sequential([
+        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='linear', input_shape=(latent_dim,)),
+        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='linear'),
+        Dense(input_dim, activation='linear')
+    ])
     # decoded = keras.Input(shape=(input_dim/2,))
-    decoder = Dense(input_dim, activation='relu', input_shape=(32,))
+    # decoder = Dense(input_dim, activation='relu', input_shape=(32,))
 
     # Combine into autoencoder model
     # Create input layer
@@ -567,7 +543,7 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=30, epochs=100, batch_siz
     autoencoder = Model(inputs=input_layer, outputs=decoded)
 
     # Compile and train the model
-    autoencoder.compile(optimizer='adam', loss='mae')
+    autoencoder.compile(optimizer='adam', loss='mse')
     autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
     
     # Create encoder model for extracting latent representations

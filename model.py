@@ -43,8 +43,8 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 PCA_VARIANCE_THRESHOLD = None
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = False
-AUTOENCODER_LATENT_DIM = 30  # Number of latent dimensions
+USE_AUTOENCODER = True
+AUTOENCODER_LATENT_DIM = 26  # Number of latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -130,7 +130,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     # Print target statistics
     print("\nTarget value statistics:")
     for col in target_columns:
-        print(f"{col}: median={y_train[col].median():.4f}, "
+        print(f"{col}: median={y_train[col].median():.4f}, mean={y_train[col].mean():.4f}, std={y_train[col].std():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
     # Apply preprocessing using imported function
@@ -159,20 +159,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                                                      enable_diagnostics=False,
                                                      model_type=model_type)
             
-            # Also run single seed CV for comparison if needed
-            print("\n=== Single Seed Comparison ===")
-            single_seed_result = perform_cross_validation(X_train_preprocessed, y_train, cv_folds=5,
-                                                         target_columns=target_columns,
-                                                         enable_diagnostics=False,
-                                                         random_seed=42,
-                                                         model_type=model_type)
-            
-            print(f"\n=== Final Comparison ===")
-            print(f"Single seed (42) CV: {single_seed_result['cv_mean']:.4f} (+/- {single_seed_result['cv_std']:.4f})")
-            print(f"Multi-seed CV: {multi_seed_result['overall_mean']:.4f} (+/- {multi_seed_result['overall_std']:.4f})")
-            
             return {
-                'single_seed': single_seed_result,
                 'multi_seed': multi_seed_result
             }
     
@@ -186,7 +173,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         if IS_KAGGLE:
             # Need to define params inline for Kaggle since we can't import config
             lgb_params = {
-                'objective': 'regression',
+                'objective': 'regression_l1',
                 'metric': 'mae',
                 'boosting_type': 'gbdt',
                 'max_depth': -1,
