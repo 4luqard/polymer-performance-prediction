@@ -43,7 +43,7 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 PCA_VARIANCE_THRESHOLD = None
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = True
+USE_AUTOENCODER = False
 AUTOENCODER_LATENT_DIM = 26  # Number of latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
@@ -178,8 +178,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 'boosting_type': 'gbdt',
                 'max_depth': -1,
                 'num_leaves': 31,
-                'n_estimators': 2000,
-                'learning_rate': 0.001,
+                'n_estimators': 200,
+                'learning_rate': 0.1,
                 'feature_fraction': 0.9,
                 'bagging_fraction': 0.8,
                 'bagging_freq': 5,

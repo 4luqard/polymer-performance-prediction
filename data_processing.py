@@ -515,18 +515,18 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
     # Define encoder architecture
     input_dim = X_train.shape[1]
     encoder = Sequential([
-        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='linear', input_shape=(input_dim,)),
-        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='linear'),
+        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='leaky_relu', input_shape=(input_dim,)),
+        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='tanh'),
         Dense(latent_dim, activation='linear')
     ])
     # input_dim = X_train.shape[1]
     # encoded = keras.Input(shape=(input_dim,))
-    # encoder = Dense(32, activation='relu', input_shape=(input_dim,))
+    #encoder = Dense(latent_dim, activation='linear', input_shape=(input_dim,))
 
     # Define decoder architecture
     decoder = Sequential([
-        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='linear', input_shape=(latent_dim,)),
-        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='linear'),
+        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='leaky_relu', input_shape=(latent_dim,)),
+        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='tanh'),
         Dense(input_dim, activation='linear')
     ])
     # decoded = keras.Input(shape=(input_dim/2,))
@@ -543,7 +543,8 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
     autoencoder = Model(inputs=input_layer, outputs=decoded)
 
     # Compile and train the model
-    autoencoder.compile(optimizer='adam', loss='mse')
+    loss = keras.losses.MeanSquaredError()
+    autoencoder.compile(optimizer='adam', loss=loss)
     autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
     
     # Create encoder model for extracting latent representations
@@ -624,7 +625,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     elif pca_variance_threshold is not None:
         print(f"Applying PCA with variance threshold {pca_variance_threshold}...")
-        global_pca = PCA(n_components=pca_variance_threshold, random_state=42)
+        global_pca = PCA(n_components=pca_variance_threshold, random_state=42, whiten=True)
         X_train_reduced = global_pca.fit_transform(X_train_scaled)
         X_test_reduced = global_pca.transform(X_test_scaled)
         print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
