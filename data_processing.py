@@ -304,8 +304,8 @@ def extract_molecular_features(smiles, rpt):
     features['num_chiral_centers'] = smiles.count('@')
     
     # Polymer-specific features
-    # features['has_polymer_end'] = int('*' in smiles)  # Removed - zero importance
-    # features['num_polymer_ends'] = smiles.count('*')  # Removed - may cause overfitting
+    features['has_polymer_end'] = int('*' in smiles)
+    features['num_polymer_ends'] = smiles.count('*')
     
     # Functional group patterns
     features['has_carbonyl'] = int('C(=O)' in smiles or 'C=O' in smiles)
@@ -493,17 +493,22 @@ def prepare_features(df):
     for idx, row in df.iterrows():
         if idx % 1000 == 0:
             print(f"Processing molecule {idx}/{len(df)}...")
-        row['SMILES_rpt'] = row['SMILES'].split('*')[1]
-        for col in ['SMILES', 'SMILES_rpt']:
-            rpt = False if col == 'SMILES' else True
-            features = extract_molecular_features(row[col], rpt)
-            # Add new_sim feature
-            features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
-            if rpt:
-                features_rpt = features
-            else:
-                features_full = features
-        features_list.append(features_full | features_rpt)
+        if '*' in row['SMILES']:
+            row['SMILES_rpt'] = row['SMILES'].split('*')[1]
+            for col in ['SMILES', 'SMILES_rpt']:
+                rpt = False if col == 'SMILES' else True
+                features = extract_molecular_features(row[col], rpt)
+                # Add new_sim feature
+                features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
+                if rpt:
+                    features_rpt = features
+                else:
+                    features_full = features
+            features_list.append(features_full | features_rpt)
+        else:
+            features = extract_molecular_features(row['SMILES'], False)
+            features['new_sim'] = int(row['new_sim'])
+            features_list.append(features)
     
     features_df = pd.DataFrame(features_list)
     return features_df

@@ -40,7 +40,7 @@ warnings.filterwarnings('ignore')
 IS_KAGGLE = os.path.exists('/kaggle/input')
 
 # PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = 0.99999999999
+PCA_VARIANCE_THRESHOLD = 0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
 USE_AUTOENCODER = False
