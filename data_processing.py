@@ -16,8 +16,9 @@ from keras.models import Sequential, Model
 from keras.layers import Dense, Input
 
 import warnings
-warnings.filterwarnings('ignore')
-
+def ignore_warn(*args, **kwargs):
+    pass
+warnings.warn = ignore_warn
 
 def calculate_main_branch_atoms(smiles):
     """
@@ -259,7 +260,7 @@ def calculate_average_bond_length(smiles):
 
 
 
-def extract_molecular_features(smiles):
+def extract_molecular_features(smiles, rpt):
     """Extract features from SMILES string without external libraries"""
     features = {}
     
@@ -465,6 +466,12 @@ def extract_molecular_features(smiles):
     else:
         features['rg_estimate'] = 0.0
     
+    if rpt:
+        feature_names = list(features.keys())
+        for feature in feature_names:
+            features[f'{feature}_rpt'] = features[feature]
+            del features[feature]
+
     return features
 
 # Define target-specific features to use
@@ -486,10 +493,17 @@ def prepare_features(df):
     for idx, row in df.iterrows():
         if idx % 1000 == 0:
             print(f"Processing molecule {idx}/{len(df)}...")
-        features = extract_molecular_features(row['SMILES'])
-        # Add new_sim feature
-        features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
-        features_list.append(features)
+        row['SMILES_rpt'] = row['SMILES'].split('*')[1]
+        for col in ['SMILES', 'SMILES_rpt']:
+            rpt = False if col == 'SMILES' else True
+            features = extract_molecular_features(row[col], rpt)
+            # Add new_sim feature
+            features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
+            if rpt:
+                features_rpt = features
+            else:
+                features_full = features
+        features_list.append(features_full | features_rpt)
     
     features_df = pd.DataFrame(features_list)
     return features_df
@@ -521,7 +535,7 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
     ])
     # input_dim = X_train.shape[1]
     # encoded = keras.Input(shape=(input_dim,))
-    #encoder = Dense(latent_dim, activation='linear', input_shape=(input_dim,))
+    # encoder = Dense(latent_dim, activation='linear', input_shape=(input_dim,))
 
     # Define decoder architecture
     decoder = Sequential([
