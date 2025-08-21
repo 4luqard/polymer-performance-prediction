@@ -40,11 +40,11 @@ warnings.filterwarnings('ignore')
 IS_KAGGLE = os.path.exists('/kaggle/input')
 
 # PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = None
+PCA_VARIANCE_THRESHOLD = 0.99999999999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
 USE_AUTOENCODER = False
-AUTOENCODER_LATENT_DIM = 26  # Number of latent dimensions
+AUTOENCODER_LATENT_DIM = 43  # Number of latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
