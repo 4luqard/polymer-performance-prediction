@@ -722,6 +722,27 @@ def load_competition_data(train_path, test_path, supp_paths=None, use_supplement
     test_df['new_sim'] = True
     print(f"Test data shape: {test_df.shape}")
     
+    # Remove duplicates from training data
+    print("\nRemoving duplicates from training data...")
+    original_count = len(train_df)
+    
+    # Count non-null target values for each row
+    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    train_df['target_count'] = train_df[target_columns].notna().sum(axis=1)
+    
+    # Sort by target_count (descending) and new_sim (True first) to prioritize rows with more data
+    train_df = train_df.sort_values(['target_count', 'new_sim'], ascending=[False, False])
+    
+    # Keep first occurrence of each SMILES (which has the most target values)
+    train_df = train_df.drop_duplicates(subset=['SMILES'], keep='first')
+    
+    # Remove the temporary target_count column
+    train_df = train_df.drop('target_count', axis=1)
+    
+    duplicate_count = original_count - len(train_df)
+    print(f"Removed {duplicate_count} duplicate rows")
+    print(f"Final training data shape: {train_df.shape}")
+    
     return train_df, test_df
 
 
