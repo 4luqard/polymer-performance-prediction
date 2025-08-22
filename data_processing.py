@@ -534,7 +534,7 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
     # Define encoder architecture
     input_dim = X_train.shape[1]
     encoder = Sequential([
-        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='leaky_relu', input_shape=(input_dim,)),
+        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='relu', input_shape=(input_dim,)),
         Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='tanh'),
         Dense(latent_dim, activation='linear')
     ])
@@ -544,7 +544,7 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
 
     # Define decoder architecture
     decoder = Sequential([
-        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='leaky_relu', input_shape=(latent_dim,)),
+        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='relu', input_shape=(latent_dim,)),
         Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='tanh'),
         Dense(input_dim, activation='linear')
     ])
@@ -562,7 +562,7 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
     autoencoder = Model(inputs=input_layer, outputs=decoded)
 
     # Compile and train the model
-    loss = keras.losses.MeanSquaredError()
+    loss = keras.losses.MeanAbsoluteError()
     autoencoder.compile(optimizer='adam', loss=loss)
     autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
     

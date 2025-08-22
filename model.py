@@ -43,8 +43,8 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 PCA_VARIANCE_THRESHOLD = 0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = False
-AUTOENCODER_LATENT_DIM = 43  # Number of latent dimensions
+USE_AUTOENCODER = True
+AUTOENCODER_LATENT_DIM = 107  # Number of latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -226,7 +226,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
                 # Split data for validation to track overfitting
                 X_tr, X_val, y_tr, y_val = train_test_split(
                     X_target_final, y_target, 
-                    test_size=0.2, random_state=42
+                    test_size=0.15, random_state=42
                 )
                 # Train with validation data to see training progress
                 model.fit(
