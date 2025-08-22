@@ -209,7 +209,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         
         if n_samples > 0:
             # Use preprocessed data directly
-            X_target = X_train_preprocessed[mask]
+            # Use mask.values to avoid index alignment issues
+            X_target = X_train_preprocessed[mask.values]
             y_target = y_train[target][mask]
             
             print(f"  Using all {X_target.shape[1]} preprocessed features")

@@ -652,8 +652,8 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     else:
-        X_train_preprocessed = pd.DataFrame(X_train_scaled)
-        X_test_preprocessed = pd.DataFrame(X_test_scaled)
+        X_train_preprocessed = pd.DataFrame(X_train_scaled, index=X_train.index)
+        X_test_preprocessed = pd.DataFrame(X_test_scaled, index=X_test.index)
     
     print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
     
