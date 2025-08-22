@@ -16,6 +16,7 @@ This project tackles the NeurIPS 2025 Open Polymer Prediction challenge, which i
 ### Advanced Feature Engineering
 - **52 molecular features** extracted from SMILES representations
 - **Target-specific feature selection** for optimal performance
+- **SMILES pattern extraction** from repeating polymer units
 - Custom features including:
   - Molecular weight estimation
   - Backbone bonds counting
@@ -24,16 +25,23 @@ This project tackles the NeurIPS 2025 Open Polymer Prediction challenge, which i
   - Van der Waals volume
   - Density estimation
 
+### Data Processing
+- **Automatic deduplication** of training data (removes ~6,600 duplicate SMILES)
+- **Sparse feature representation** for memory efficiency
+- **Full dataset preprocessing** before CV (uses ~17,000 samples)
+- Handles missing values effectively (~91% of samples have only 1 target)
+
 ### Model Architecture
 - **LightGBM gradient boosting** for non-linear relationships
 - Separate models for each target property
-- Handles missing values effectively (~91% of samples have only 1 target)
 - Integrates supplementary datasets for improved training
+- Optimized preprocessing pipeline for efficiency
 
 ### Performance
-- Cross-validation score: **0.0542** (competition metric)
-- No PCA dimensionality reduction (tested but degrades performance)
+- Cross-validation score: **0.0541** (competition metric)
+- No dimensionality reduction (tested PCA/Autoencoder but degrades performance)
 - Multi-seed validation for robust evaluation
+- Improved index alignment for accurate predictions
 
 ## Project Structure
 
@@ -52,6 +60,7 @@ This project tackles the NeurIPS 2025 Open Polymer Prediction challenge, which i
 ├── output/                  # Model outputs
 │   └── submission.csv       # Competition submission file
 ├── model.py                 # Main model implementation
+├── data_processing.py       # Data loading and feature engineering
 ├── cv.py                    # Cross-validation functions
 ├── config.py                # Model configuration
 ├── FEATURES.md              # Detailed feature documentation
@@ -89,13 +98,20 @@ See [FEATURES.md](FEATURES.md) for detailed feature rankings and descriptions.
 ## Model Details
 
 ### LightGBM Parameters
-- Objective: regression (MAE)
+- Objective: regression_l1 (MAE)
 - Max depth: -1 (no limit)
 - Num leaves: 31
 - Estimators: 200
 - Learning rate: 0.1
 - Feature fraction: 0.9
 - Bagging fraction: 0.8
+
+### Data Processing Pipeline
+1. Load all data sources (train, test, supplementary)
+2. Remove duplicate SMILES (prioritizing samples with more targets)
+3. Extract 52 molecular features from SMILES
+4. Apply preprocessing (scaling, optional dimensionality reduction)
+5. Train separate models for each target property
 
 ### Feature Selection Strategy
 Different atom count features are selected for each target based on importance:
@@ -109,10 +125,18 @@ Different atom count features are selected for each target based on importance:
 
 | Model Configuration | CV Score |
 |-------------------|----------|
-| LightGBM (no PCA) | 0.0542   |
+| LightGBM (current) | 0.0541   |
+| LightGBM (no preprocessing) | 0.0542   |
 | Ridge (no PCA)    | 0.0674   |
 | LightGBM + PCA    | 0.0598   |
 | Ridge + PCA       | 0.0687   |
+
+## Recent Improvements
+- Fixed index alignment bug between preprocessed features and target masks
+- Implemented efficient deduplication strategy
+- Moved preprocessing before CV for better efficiency
+- Added SMILES pattern extraction from repeating units
+- Optimized sparse feature representation
 
 ## License
 MIT License - see [LICENSE](LICENSE) file for details.
