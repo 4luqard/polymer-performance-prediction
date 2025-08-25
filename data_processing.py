@@ -10,6 +10,7 @@ import math
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
+from sklearn.cross_decomposition import PLSRegression
 
 import keras
 from keras.models import Sequential, Model
@@ -596,13 +597,14 @@ def select_features_for_target(X, target):
 
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
-                    pca_variance_threshold=None):
+                    pca_variance_threshold=None, use_pls=False, pls_n_components=50,
+                    y_train=None):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
     - Imputing missing values
     - Scaling features
-    - Applying dimensionality reduction (PCA or autoencoder)
+    - Applying dimensionality reduction (PCA, PLS, or autoencoder)
     
     Args:
         X_train: Training features DataFrame
@@ -610,6 +612,9 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         use_autoencoder: Whether to use autoencoder for dimensionality reduction
         autoencoder_latent_dim: Number of latent dimensions for autoencoder
         pca_variance_threshold: Variance threshold for PCA (None to disable)
+        use_pls: Whether to use PLS for dimensionality reduction
+        pls_n_components: Number of PLS components
+        y_train: Target values DataFrame (required for PLS)
     
     Returns:
         Tuple of (X_train_preprocessed, X_test_preprocessed)
@@ -642,6 +647,48 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, latent_dim=autoencoder_latent_dim)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
+    elif use_pls:
+        if y_train is None:
+            raise ValueError("y_train is required for PLS dimensionality reduction")
+        
+        # Validate number of components
+        max_components = min(X_train_scaled.shape[0], X_train_scaled.shape[1])
+        if pls_n_components > max_components:
+            print(f"WARNING: Requested {pls_n_components} PLS components exceeds maximum ({max_components})")
+            pls_n_components = max_components
+        
+        print(f"Applying PLS: {X_train_scaled.shape[1]} features -> {pls_n_components} components")
+        
+        # Handle missing values in y_train for PLS
+        # Create a mask for samples with at least one non-missing target
+        y_mask = ~y_train.isna().all(axis=1)
+        
+        # Check if we have any samples with targets
+        if not y_mask.any():
+            print("WARNING: No samples with non-missing targets found for PLS fitting.")
+            print("Falling back to PCA for dimensionality reduction.")
+            # Fall back to PCA
+            pca = PCA(n_components=pls_n_components, random_state=42, whiten=True)
+            X_train_reduced = pca.fit_transform(X_train_scaled)
+            X_test_reduced = pca.transform(X_test_scaled)
+            print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
+        else:
+            # Filter data for PLS fitting
+            X_train_pls = X_train_scaled[y_mask]
+            y_train_pls = y_train[y_mask].fillna(y_train[y_mask].mean())
+            
+            # Fit PLS model
+            pls = PLSRegression(n_components=pls_n_components, scale=False)
+            pls.fit(X_train_pls, y_train_pls)
+            
+            # Transform both train and test data
+            X_train_reduced = pls.transform(X_train_scaled)
+            X_test_reduced = pls.transform(X_test_scaled)
+            
+            print(f"PLS fitted on {X_train_pls.shape[0]} samples with non-missing targets")
+        
+        X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
+        X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
     elif pca_variance_threshold is not None:
         print(f"Applying PCA with variance threshold {pca_variance_threshold}...")
         global_pca = PCA(n_components=pca_variance_threshold, random_state=42, whiten=True)
