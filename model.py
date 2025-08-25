@@ -39,12 +39,17 @@ warnings.filterwarnings('ignore')
 # Check if running on Kaggle or locally
 IS_KAGGLE = os.path.exists('/kaggle/input')
 
+# Dimensionality reduction settings (only one method should be enabled at a time)
 # PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = 0.99999
+PCA_VARIANCE_THRESHOLD = None#0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = True
+USE_AUTOENCODER = False
 AUTOENCODER_LATENT_DIM = 107  # Number of latent dimensions
+
+# PLS settings - set to True to use PLS instead of PCA/autoencoder
+USE_PLS = True  # Whether to use PLS for dimensionality reduction
+PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -98,6 +103,11 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     """
     print(f"=== Separate {model_type.upper()} Models for Polymer Prediction ===")
     
+    # Validate dimensionality reduction settings
+    dim_reduction_methods = sum([USE_AUTOENCODER, USE_PLS, PCA_VARIANCE_THRESHOLD is not None])
+    if dim_reduction_methods > 1:
+        raise ValueError("Only one dimensionality reduction method should be enabled at a time")
+    
     # Load competition data using imported function
     train_df, test_df = load_competition_data(
         TRAIN_PATH, TEST_PATH, 
@@ -138,7 +148,10 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         X_train, X_test, 
         use_autoencoder=USE_AUTOENCODER,
         autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-        pca_variance_threshold=PCA_VARIANCE_THRESHOLD
+        pca_variance_threshold=PCA_VARIANCE_THRESHOLD,
+        use_pls=USE_PLS,
+        pls_n_components=PLS_N_COMPONENTS,
+        y_train=y_train
     )
     
     # Run cross-validation if requested (but not on Kaggle)
@@ -290,5 +303,12 @@ if __name__ == "__main__":
         model_idx = sys.argv.index('--model')
         if model_idx + 1 < len(sys.argv):
             model_type = sys.argv[model_idx + 1]
+
+    # Check for no dimensionality reduction
+    if '--no-dim-reduction' in sys.argv:
+        USE_PLS = False
+        PCA_VARIANCE_THRESHOLD = None
+        USE_AUTOENCODER = False
+        print("No dimensionality reduction will be used")
     
     main(cv_only=cv_only, use_supplementary=not no_supplement, model_type=model_type)
