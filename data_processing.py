@@ -586,9 +586,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     if supervised and y_train is not None:
         # Add prediction head from latent space
         num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
-        prediction_layer = Dense(int(latent_dim/2), activation='relu')(encoded)
-        prediction_layer = Dense(int(latent_dim/4), activation='relu')(prediction_layer)
-        predictions = Dense(num_targets, activation='linear', name='predictions')(prediction_layer)
+        predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
         
         # Create model with dual outputs
         model = Model(inputs=input_layer, outputs=[decoded, predictions])
