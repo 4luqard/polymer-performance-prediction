@@ -44,11 +44,12 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 PCA_VARIANCE_THRESHOLD = None#0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = False
-AUTOENCODER_LATENT_DIM = 107  # Number of latent dimensions
+USE_AUTOENCODER = True
+AUTOENCODER_LATENT_DIM = 32  # Number of latent dimensions
+EPOCHS = 20
 
 # PLS settings - set to True to use PLS instead of PCA/autoencoder
-USE_PLS = True  # Whether to use PLS for dimensionality reduction
+USE_PLS = False  # Whether to use PLS for dimensionality reduction
 PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Import competition metric and CV functions only if not on Kaggle
@@ -151,7 +152,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         pca_variance_threshold=PCA_VARIANCE_THRESHOLD,
         use_pls=USE_PLS,
         pls_n_components=PLS_N_COMPONENTS,
-        y_train=y_train
+        y_train=y_train,
+        epochs=EPOCHS
     )
     
     # Run cross-validation if requested (but not on Kaggle)
