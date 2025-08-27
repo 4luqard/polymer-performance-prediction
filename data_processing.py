@@ -516,7 +516,7 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=20, batch_size=128, supervised=True, random_state=42):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, supervised=True, random_state=42):
     """
     Apply autoencoder for dimensionality reduction.
     
@@ -669,7 +669,7 @@ def select_features_for_target(X, target):
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
                     pca_variance_threshold=None, use_pls=False, pls_n_components=50,
-                    y_train=None):
+                    y_train=None, epochs=100):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -715,7 +715,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     global_pca = None
     if use_autoencoder:
         print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim)
+        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     elif use_pls:
