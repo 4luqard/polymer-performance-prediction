@@ -516,22 +516,50 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_size=128):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=20, batch_size=128, supervised=True, random_state=42):
     """
     Apply autoencoder for dimensionality reduction.
     
     Args:
         X_train: Training data (n_samples, n_features)
         X_test: Test data (optional)
+        y_train: Target values for supervised learning (optional)
         latent_dim: Number of dimensions in the latent space
         epochs: Number of training epochs
         batch_size: Batch size for training
+        supervised: Whether to use supervised autoencoder with target prediction
+        random_state: Random seed for reproducibility
     
     Returns:
         If X_test is None: X_train_encoded
         If X_test is provided: (X_train_encoded, X_test_encoded)
     
-    """    
+    """
+    # Set seeds for reproducibility
+    import numpy as np
+    import random
+    import os
+    
+    # Set all random seeds
+    np.random.seed(random_state)
+    random.seed(random_state)
+    os.environ['PYTHONHASHSEED'] = str(random_state)
+    
+    # Try to import tensorflow and set its seed
+    try:
+        import tensorflow as tf
+        tf.random.set_seed(random_state)
+        # For older versions of tensorflow/keras
+        if hasattr(tf, 'set_random_seed'):
+            tf.set_random_seed(random_state)
+    except ImportError:
+        # If tensorflow not available, try keras backend
+        try:
+            import keras.backend as K
+            if hasattr(K, 'set_random_seed'):
+                K.set_random_seed(random_state)
+        except:
+            pass    
     # Define encoder architecture
     input_dim = X_train.shape[1]
     encoder = Sequential([
@@ -539,9 +567,6 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
         Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='tanh'),
         Dense(latent_dim, activation='linear')
     ])
-    # input_dim = X_train.shape[1]
-    # encoded = keras.Input(shape=(input_dim,))
-    # encoder = Dense(latent_dim, activation='linear', input_shape=(input_dim,))
 
     # Define decoder architecture
     decoder = Sequential([
@@ -549,26 +574,72 @@ def apply_autoencoder(X_train, X_test=None, latent_dim=26, epochs=100, batch_siz
         Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='tanh'),
         Dense(input_dim, activation='linear')
     ])
-    # decoded = keras.Input(shape=(input_dim/2,))
-    # decoder = Dense(input_dim, activation='relu', input_shape=(32,))
 
-    # Combine into autoencoder model
     # Create input layer
     input_layer = Input(shape=(input_dim,))
     # Pass through encoder
     encoded = encoder(input_layer)
     # Pass through decoder
     decoded = decoder(encoded)
-    # Create autoencoder model
-    autoencoder = Model(inputs=input_layer, outputs=decoded)
-
-    # Compile and train the model
-    loss = keras.losses.MeanAbsoluteError()
-    autoencoder.compile(optimizer='adam', loss=loss)
-    autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=0)
     
-    # Create encoder model for extracting latent representations
-    encoder_model = Model(inputs=input_layer, outputs=encoded)
+    # If supervised mode and targets provided, add prediction head
+    if supervised and y_train is not None:
+        # Add prediction head from latent space
+        num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
+        prediction_layer = Dense(int(latent_dim/2), activation='relu')(encoded)
+        prediction_layer = Dense(int(latent_dim/4), activation='relu')(prediction_layer)
+        predictions = Dense(num_targets, activation='linear', name='predictions')(prediction_layer)
+        
+        # Create model with dual outputs
+        model = Model(inputs=input_layer, outputs=[decoded, predictions])
+        
+        # Custom loss weighting
+        reconstruction_weight = 1.0
+        prediction_weight = 0.5  # Balance between reconstruction and prediction
+        
+        # Compile model with dual losses
+        model.compile(
+            optimizer='adam',
+            loss=['mae', 'mae'],
+            loss_weights=[reconstruction_weight, prediction_weight]
+        )
+        
+        # Prepare training data - handle missing values in targets
+        y_train_filled = np.nan_to_num(y_train, nan=0.0)  # Fill NaN with 0 for training
+        
+        # Create sample weights to ignore missing values
+        # For multi-output regression, we need to average the weights across targets
+        sample_weights_pred = np.where(np.isnan(y_train), 0.0, 1.0)
+        # Average across targets to get a single weight per sample
+        sample_weights_pred = np.mean(sample_weights_pred, axis=1 if len(sample_weights_pred.shape) > 1 else 0)
+            
+        # Train the model - only pass sample weights for predictions
+        # Create equal weights for reconstruction loss
+        sample_weights_recon = np.ones(X_train.shape[0])
+        
+        model.fit(
+            X_train, 
+            [X_train, y_train_filled],
+            sample_weight=[sample_weights_recon, sample_weights_pred],
+            epochs=epochs, 
+            batch_size=batch_size, 
+            verbose=0
+        )
+        
+        # Create encoder model for extracting latent representations
+        encoder_model = Model(inputs=input_layer, outputs=encoded)
+        
+    else:
+        # Unsupervised mode - original behavior
+        autoencoder = Model(inputs=input_layer, outputs=decoded)
+        
+        # Compile and train the model
+        loss = keras.losses.MeanAbsoluteError()
+        autoencoder.compile(optimizer='adam', loss=loss)
+        autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=1)
+        
+        # Create encoder model for extracting latent representations
+        encoder_model = Model(inputs=input_layer, outputs=encoded)
     
     # Extract encoder and apply to data
     X_train_encoded = encoder_model.predict(X_train)
@@ -643,8 +714,8 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     # Apply dimensionality reduction if enabled
     global_pca = None
     if use_autoencoder:
-        print(f"Applying autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, latent_dim=autoencoder_latent_dim)
+        print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
+        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     elif use_pls:
