@@ -3,6 +3,11 @@ Data processing functions for NeurIPS Open Polymer Prediction 2025
 Extracted from model.py for better code organization
 """
 
+import os
+# Configure TensorFlow to use CPU only
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import pandas as pd
 import numpy as np
 import re
@@ -11,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
+from tqdm import tqdm
 
 import keras
 from keras.models import Sequential, Model
@@ -491,9 +497,7 @@ def prepare_features(df):
     print("Extracting molecular features...")
     features_list = []
     
-    for idx, row in df.iterrows():
-        if idx % 1000 == 0:
-            print(f"Processing molecule {idx}/{len(df)}...")
+    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing molecules"):
         if '*' in row['SMILES']:
             row['SMILES_rpt'] = row['SMILES'].split('*')[1]
             for col in ['SMILES', 'SMILES_rpt']:
@@ -667,7 +671,8 @@ def select_features_for_target(X, target):
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
                     pca_variance_threshold=None, use_pls=False, pls_n_components=50,
-                    y_train=None, epochs=100, use_transformer=False, transformer_latent_dim=32):
+                    y_train=None, epochs=100, use_transformer=False, transformer_latent_dim=16,
+                    smiles_train=None, smiles_test=None):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -779,24 +784,30 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         try:
             from transformer_model import TransformerModel
             
-            # Initialize and train transformer
+            # Ensure we have SMILES data
+            if smiles_train is None or smiles_test is None:
+                print("Error: SMILES data required for transformer. Skipping transformer features.")
+                return X_train_preprocessed, X_test_preprocessed
+            
+            # Initialize and train transformer (optimized for speed)
             transformer = TransformerModel(
-                input_dim=X_train_scaled.shape[1],
+                vocab_size=None,  # Will use default tokenizer vocab
                 target_dim=5,
-                latent_dim=transformer_latent_dim,
-                num_heads=4,
-                num_encoder_layers=2,
-                num_decoder_layers=2,
-                ff_dim=64,
-                random_state=42
+                latent_dim=transformer_latent_dim,  # Use provided latent dimension
+                num_heads=2,  # Reduced heads for speed
+                num_encoder_layers=1,  # Single layer for speed
+                num_decoder_layers=1,  # Single layer for speed
+                ff_dim=32,  # Reduced FF dimension
+                random_state=42,
+                max_length=100  # Reduced max length for memory efficiency
             )
             
-            # Fit transformer on training data
-            transformer.fit(X_train_scaled, y_train, epochs=10, batch_size=32, verbose=0)
+            # Fit transformer on training data using SMILES directly (optimized)
+            transformer.fit(smiles_train, y_train, epochs=3, batch_size=64, verbose=0)
             
             # Extract latent features
-            transformer_features_train = transformer.transform(X_train_scaled)
-            transformer_features_test = transformer.transform(X_test_scaled)
+            transformer_features_train = transformer.transform(smiles_train)
+            transformer_features_test = transformer.transform(smiles_test)
             
             # Add transformer features to the preprocessed data
             transformer_cols = [f'transformer_{i}' for i in range(transformer_latent_dim)]
