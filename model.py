@@ -52,6 +52,10 @@ EPOCHS = 20
 USE_PLS = False  # Whether to use PLS for dimensionality reduction
 PLS_N_COMPONENTS = 86  # Number of PLS components
 
+# Transformer settings - set to True to add transformer features
+USE_TRANSFORMER = False  # Whether to add transformer latent features
+TRANSFORMER_LATENT_DIM = 32  # Number of transformer latent dimensions
+
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
     from src.competition_metric import neurips_polymer_metric
@@ -153,7 +157,9 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         use_pls=USE_PLS,
         pls_n_components=PLS_N_COMPONENTS,
         y_train=y_train,
-        epochs=EPOCHS
+        epochs=EPOCHS,
+        use_transformer=USE_TRANSFORMER,
+        transformer_latent_dim=TRANSFORMER_LATENT_DIM
     )
     
     # Run cross-validation if requested (but not on Kaggle)
