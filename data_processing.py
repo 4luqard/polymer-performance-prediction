@@ -667,7 +667,7 @@ def select_features_for_target(X, target):
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
                     pca_variance_threshold=None, use_pls=False, pls_n_components=50,
-                    y_train=None, epochs=100):
+                    y_train=None, epochs=100, use_transformer=False, transformer_latent_dim=32):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -772,6 +772,53 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_test_preprocessed = pd.DataFrame(X_test_scaled, index=X_test.index)
     
     print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
+    
+    # Add transformer features if enabled
+    if use_transformer:
+        print(f"Adding transformer latent features (latent_dim={transformer_latent_dim})...")
+        try:
+            from transformer_model import TransformerModel
+            
+            # Initialize and train transformer
+            transformer = TransformerModel(
+                input_dim=X_train_scaled.shape[1],
+                target_dim=5,
+                latent_dim=transformer_latent_dim,
+                num_heads=4,
+                num_encoder_layers=2,
+                num_decoder_layers=2,
+                ff_dim=64,
+                random_state=42
+            )
+            
+            # Fit transformer on training data
+            transformer.fit(X_train_scaled, y_train, epochs=10, batch_size=32, verbose=0)
+            
+            # Extract latent features
+            transformer_features_train = transformer.transform(X_train_scaled)
+            transformer_features_test = transformer.transform(X_test_scaled)
+            
+            # Add transformer features to the preprocessed data
+            transformer_cols = [f'transformer_{i}' for i in range(transformer_latent_dim)]
+            
+            X_train_with_transformer = pd.concat([
+                X_train_preprocessed,
+                pd.DataFrame(transformer_features_train, index=X_train_preprocessed.index, columns=transformer_cols)
+            ], axis=1)
+            
+            X_test_with_transformer = pd.concat([
+                X_test_preprocessed,
+                pd.DataFrame(transformer_features_test, index=X_test_preprocessed.index, columns=transformer_cols)
+            ], axis=1)
+            
+            print(f"Added {transformer_latent_dim} transformer features. New shape: {X_train_with_transformer.shape}")
+            
+            return X_train_with_transformer, X_test_with_transformer
+            
+        except ImportError:
+            print("Warning: transformer_model not found. Skipping transformer features.")
+        except Exception as e:
+            print(f"Warning: Error adding transformer features: {e}")
     
     return X_train_preprocessed, X_test_preprocessed
 
