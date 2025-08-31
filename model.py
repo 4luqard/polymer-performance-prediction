@@ -41,10 +41,10 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 
 # Dimensionality reduction settings (only one method should be enabled at a time)
 # PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = None#0.99999
+PCA_VARIANCE_THRESHOLD = 0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = True
+USE_AUTOENCODER = False
 AUTOENCODER_LATENT_DIM = 32  # Number of latent dimensions
 EPOCHS = 20
 
@@ -53,8 +53,8 @@ USE_PLS = False  # Whether to use PLS for dimensionality reduction
 PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Transformer settings - set to True to add transformer features
-USE_TRANSFORMER = False  # Whether to add transformer latent features
-TRANSFORMER_LATENT_DIM = 32  # Number of transformer latent dimensions
+USE_TRANSFORMER = True  # Whether to add transformer latent features
+TRANSFORMER_LATENT_DIM = 64  # Number of transformer latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -159,7 +159,9 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         y_train=y_train,
         epochs=EPOCHS,
         use_transformer=USE_TRANSFORMER,
-        transformer_latent_dim=TRANSFORMER_LATENT_DIM
+        transformer_latent_dim=TRANSFORMER_LATENT_DIM,
+        smiles_train=train_df['SMILES'],
+        smiles_test=test_df['SMILES']
     )
     
     # Run cross-validation if requested (but not on Kaggle)
