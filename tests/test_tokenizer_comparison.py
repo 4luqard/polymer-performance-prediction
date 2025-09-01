@@ -1,9 +1,15 @@
+import pytest
+import sys
+import os
 import numpy as np
-import pandas as pd
 from scipy.stats import spearmanr
 from sklearn.metrics.pairwise import cosine_similarity
 import warnings
 warnings.filterwarnings('ignore')
+
+# Add parent directory to path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
 
 def test_tokenizer_comparison():
     """Compare current SMILESTokenizer with DeepChem's SmilesTokenizer"""

@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Final validation that changes work correctly"""
+import pytest
 import sys
-sys.path.insert(0, '/workspace/kaggle/neurips-open-polymer-prediction-2025')
+import os
+import numpy as np
+
+# Add parent directory to path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
 
 def test_final_validation():
     """Validate the tokenizer integration"""
@@ -37,4 +43,4 @@ def test_final_validation():
     return True
 
 if __name__ == "__main__":
-    test_final_validation()
+    pytest.main([__file__, "-v"])
