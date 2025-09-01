@@ -794,10 +794,10 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
                 vocab_size=None,  # Will use default tokenizer vocab
                 target_dim=5,
                 latent_dim=transformer_latent_dim,  # Use provided latent dimension
-                num_heads=2,  # Reduced heads for speed
-                num_encoder_layers=1,  # Single layer for speed
-                num_decoder_layers=1,  # Single layer for speed
-                ff_dim=32,  # Reduced FF dimension
+                num_heads=4,  # Reduced heads for speed
+                num_encoder_layers=2,  # Single layer for speed
+                num_decoder_layers=2,  # Single layer for speed
+                ff_dim=512,  # Reduced FF dimension
                 random_state=42,
                 max_length=100  # Reduced max length for memory efficiency
             )
