@@ -53,7 +53,7 @@ USE_PLS = False  # Whether to use PLS for dimensionality reduction
 PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Transformer settings - set to True to add transformer features
-USE_TRANSFORMER = True  # Whether to add transformer latent features
+USE_TRANSFORMER = False  # Whether to add transformer latent features
 TRANSFORMER_LATENT_DIM = 64  # Number of transformer latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
