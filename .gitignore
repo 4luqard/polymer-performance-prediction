@@ -214,3 +214,6 @@ kernel-metadata.json
 # Submission-related temporary directories
 submission_kernel/
 *.kaggle-credentials
+
+# Datasets
+data/

@@ -78,7 +78,9 @@ if IS_KAGGLE:
         '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv',
         '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv',
         '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv',
-        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv'
+        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv',
+        '/kaggle/input/extra-dataset-with-smilestgpidpolimers-class/TgSS_enriched_cleaned.csv',
+        '/kaggle/input/polymer-tg-density-excerpt/tg_density.csv'
     ]
 else:
     # Local paths
@@ -91,7 +93,9 @@ else:
         'data/raw/train_supplement/dataset1.csv',
         'data/raw/train_supplement/dataset2.csv',
         'data/raw/train_supplement/dataset3.csv',
-        'data/raw/train_supplement/dataset4.csv'
+        'data/raw/train_supplement/dataset4.csv',
+        'data/raw/extra_datasets/TgSS_enriched_cleaned.csv',
+        'data/raw/extra_datasets/tg_density.csv'
     ]
 
 # Target columns
