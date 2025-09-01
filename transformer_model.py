@@ -21,7 +21,7 @@ def set_seeds(seed=42):
 
 
 class SMILESTokenizer:
-    """SMILES tokenizer using pre-trained transformer tokenizer."""
+    """SMILES tokenizer using DeepChem's SmilesTokenizer."""
     
     def __init__(self, max_length=150, use_deepchem=True):
         self.max_length = max_length
@@ -29,40 +29,17 @@ class SMILESTokenizer:
         
         if use_deepchem:
             try:
-                from transformers import AutoTokenizer
+                from deepchem.feat.smiles_tokenizer import BasicSmilesTokenizer
                 import os
                 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid warning
                 
-                # Check if we're in Kaggle environment
-                tokenizer_loaded = False
-                if os.path.exists('/kaggle/input'):
-                    # Try to load from Kaggle dataset
-                    tokenizer_paths = [
-                        '/kaggle/input/polymer-tokenizer/tokenizer_files',
-                        '/kaggle/input/tokenizer-files/tokenizer_files',
-                        '/kaggle/input/smiles-tokenizer/tokenizer_files'
-                    ]
-                    for path in tokenizer_paths:
-                        if os.path.exists(path):
-                            print(f"Loading tokenizer from {path}...")
-                            self.tokenizer = AutoTokenizer.from_pretrained(path)
-                            self.vocab_size = self.tokenizer.vocab_size
-                            tokenizer_loaded = True
-                            break
-                
-                # Try local tokenizer directory
-                if not tokenizer_loaded and os.path.exists('tokenizer_files'):
-                    print("Loading tokenizer from local directory...")
-                    self.tokenizer = AutoTokenizer.from_pretrained('tokenizer_files')
-                    self.vocab_size = self.tokenizer.vocab_size
-                    tokenizer_loaded = True
-                
-                # Fall back to downloading if not found
-                if not tokenizer_loaded:
-                    self.tokenizer = AutoTokenizer.from_pretrained("seyonec/PubChem10M_SMILES_BPE_450k")
-                    self.vocab_size = self.tokenizer.vocab_size
+                # Use BasicSmilesTokenizer which doesn't require vocab file
+                self.basic_tokenizer = BasicSmilesTokenizer()
+                # Build character vocabulary for numeric encoding
+                self.chars = list('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()[]+-=#@/*.:,;$%&\\|')
+                self._build_vocab()
             except Exception as e:
-                print(f"Failed to load tokenizer ({e}), falling back to character-level")
+                print(f"Failed to load DeepChem tokenizer ({e}), falling back to character-level")
                 self.use_deepchem = False
         
         if not self.use_deepchem:
@@ -92,10 +69,15 @@ class SMILESTokenizer:
         if self.use_deepchem:
             for smiles in smiles_list:
                 smiles_str = str(smiles) if smiles is not None else ''
-                tokens = self.tokenizer.encode(smiles_str, add_special_tokens=False, 
-                                              max_length=self.max_length, 
-                                              padding='max_length', 
-                                              truncation=True)
+                # Use BasicSmilesTokenizer to get character tokens
+                char_tokens = self.basic_tokenizer.tokenize(smiles_str)
+                # Convert to indices
+                tokens = []
+                for char in char_tokens[:self.max_length]:
+                    tokens.append(self.char_to_idx.get(char, self.char_to_idx['<UNK>']))
+                # Pad to max_length
+                while len(tokens) < self.max_length:
+                    tokens.append(self.char_to_idx['<PAD>'])
                 tokenized.append(tokens[:self.max_length])
         else:
             for smiles in smiles_list:
@@ -345,13 +327,11 @@ class TransformerModel:
             verbose=verbose
         )
         
-        # Output final epoch loss
+        # Output final epoch losses
         if history.history:
-            final_train_loss = history.history['loss'][-1]
-            print(f"\nFinal Training Loss: {final_train_loss:.4f}")
-            if 'val_loss' in history.history:
-                final_val_loss = history.history['val_loss'][-1]
-                print(f"Final Validation Loss: {final_val_loss:.4f}")
+            final_train_loss = history.history['loss'][-1] if 'loss' in history.history else None
+            final_val_loss = history.history['val_loss'][-1] if 'val_loss' in history.history else None
+            print(f"\nFinal Epoch - Training Loss: {final_train_loss:.6f}, Validation Loss: {final_val_loss:.6f}")
         
         return history
     
