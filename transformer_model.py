@@ -32,10 +32,37 @@ class SMILESTokenizer:
                 from transformers import AutoTokenizer
                 import os
                 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid warning
-                self.tokenizer = AutoTokenizer.from_pretrained("seyonec/PubChem10M_SMILES_BPE_450k")
-                self.vocab_size = self.tokenizer.vocab_size
+                
+                # Check if we're in Kaggle environment
+                tokenizer_loaded = False
+                if os.path.exists('/kaggle/input'):
+                    # Try to load from Kaggle dataset
+                    tokenizer_paths = [
+                        '/kaggle/input/polymer-tokenizer/tokenizer_files',
+                        '/kaggle/input/tokenizer-files/tokenizer_files',
+                        '/kaggle/input/smiles-tokenizer/tokenizer_files'
+                    ]
+                    for path in tokenizer_paths:
+                        if os.path.exists(path):
+                            print(f"Loading tokenizer from {path}...")
+                            self.tokenizer = AutoTokenizer.from_pretrained(path)
+                            self.vocab_size = self.tokenizer.vocab_size
+                            tokenizer_loaded = True
+                            break
+                
+                # Try local tokenizer directory
+                if not tokenizer_loaded and os.path.exists('tokenizer_files'):
+                    print("Loading tokenizer from local directory...")
+                    self.tokenizer = AutoTokenizer.from_pretrained('tokenizer_files')
+                    self.vocab_size = self.tokenizer.vocab_size
+                    tokenizer_loaded = True
+                
+                # Fall back to downloading if not found
+                if not tokenizer_loaded:
+                    self.tokenizer = AutoTokenizer.from_pretrained("seyonec/PubChem10M_SMILES_BPE_450k")
+                    self.vocab_size = self.tokenizer.vocab_size
             except Exception as e:
-                print(f"Failed to load DeepChem tokenizer ({e}), falling back to character-level")
+                print(f"Failed to load tokenizer ({e}), falling back to character-level")
                 self.use_deepchem = False
         
         if not self.use_deepchem:
@@ -134,7 +161,7 @@ class TransformerModel:
         out1 = layers.LayerNormalization(epsilon=1e-6)(inputs + attn_output)
         
         # Feed-forward network
-        ffn_output = layers.Dense(self.ff_dim, activation="gelu")(out1)
+        ffn_output = layers.Dense(self.ff_dim, activation="linear")(out1)
         ffn_output = layers.Dropout(self.dropout_rate)(ffn_output)
         ffn_output = layers.Dense(self.latent_dim)(ffn_output)
         ffn_output = layers.Dropout(self.dropout_rate)(ffn_output)
@@ -161,7 +188,7 @@ class TransformerModel:
         out2 = layers.LayerNormalization(epsilon=1e-6)(out1 + attn2)
         
         # Feed-forward
-        ffn_output = layers.Dense(self.ff_dim, activation="gelu")(out2)
+        ffn_output = layers.Dense(self.ff_dim, activation="linear")(out2)
         ffn_output = layers.Dropout(self.dropout_rate)(ffn_output)
         ffn_output = layers.Dense(self.latent_dim)(ffn_output)
         ffn_output = layers.Dropout(self.dropout_rate)(ffn_output)
@@ -226,7 +253,7 @@ class TransformerModel:
         
         # Final projection to targets
         dec = layers.Flatten()(dec)
-        dec = layers.Dense(self.ff_dim, activation="gelu")(dec)
+        dec = layers.Dense(self.ff_dim, activation="linear")(dec)
         dec = layers.Dropout(self.dropout_rate)(dec)
         outputs = layers.Dense(self.target_dim, name="predictions")(dec)
         
@@ -283,7 +310,7 @@ class TransformerModel:
         )
         
         self.model.compile(
-            optimizer=keras.optimizers.AdamW(learning_rate=5e-3),  # Fixed LR for faster convergence
+            optimizer=keras.optimizers.Adam(learning_rate=5e-3),  # Fixed LR for faster convergence
             loss=masked_mse,
             metrics=['mae'],
             jit_compile=False  # Disable XLA compilation for CPU
@@ -317,6 +344,14 @@ class TransformerModel:
             callbacks=callbacks,
             verbose=verbose
         )
+        
+        # Output final epoch loss
+        if history.history:
+            final_train_loss = history.history['loss'][-1]
+            print(f"\nFinal Training Loss: {final_train_loss:.4f}")
+            if 'val_loss' in history.history:
+                final_val_loss = history.history['val_loss'][-1]
+                print(f"Final Validation Loss: {final_val_loss:.4f}")
         
         return history
     

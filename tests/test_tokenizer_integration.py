@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-import numpy as np
+import pytest
 import sys
-sys.path.insert(0, '/workspace/kaggle/neurips-open-polymer-prediction-2025')
+import os
+import numpy as np
+
+# Add parent directory to path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
 
 def test_integration():
     """Test that DeepChem tokenizer integration works"""
@@ -36,4 +41,4 @@ def test_integration():
     return True
 
 if __name__ == "__main__":
-    test_integration()
+    pytest.main([__file__, "-v"])
