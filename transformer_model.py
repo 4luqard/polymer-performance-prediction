@@ -4,6 +4,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import random
 import os
+from typing import Optional, Tuple, Union
 
 # Force CPU usage
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -266,6 +267,9 @@ class TransformerModel:
             jit_compile=False  # Disable XLA compilation for CPU
         )
         
+        # Store y for potential residual calculation
+        self.last_y_train = y
+        
         # Early stopping for convergence
         callbacks = [
             keras.callbacks.EarlyStopping(
@@ -303,6 +307,52 @@ class TransformerModel:
         
         return history
     
+    def fit_predict(self, X_smiles, y, epochs=10, batch_size=32, 
+                    validation_split=0.1, verbose=1, return_residuals=False):
+        """
+        Fit the model and return predictions (and optionally residuals).
+        
+        Args:
+            X_smiles: SMILES strings
+            y: Target values
+            epochs: Number of training epochs
+            batch_size: Batch size
+            validation_split: Validation split fraction
+            verbose: Verbosity level
+            return_residuals: If True, return residuals too
+        
+        Returns:
+            Predictions or tuple of (predictions, residuals)
+        """
+        # Fit the model
+        history = self.fit(X_smiles, y, epochs, batch_size, validation_split, verbose)
+        
+        # Get predictions
+        predictions = self.predict(X_smiles)
+        
+        if return_residuals:
+            residuals = y - predictions
+            return predictions, residuals, history
+        
+        return predictions, history
+    
+    def get_training_residuals(self, X_smiles):
+        """
+        Get residuals for the training data.
+        
+        Args:
+            X_smiles: Training SMILES strings
+        
+        Returns:
+            Residuals (n_samples, n_targets)
+        """
+        if not hasattr(self, 'last_y_train') or self.last_y_train is None:
+            raise ValueError("Model must be fitted before getting training residuals")
+        
+        predictions = self.predict(X_smiles)
+        residuals = self.last_y_train - predictions
+        return residuals
+    
     def transform(self, X_smiles):
         """
         Extract latent features from SMILES strings.
@@ -321,15 +371,17 @@ class TransformerModel:
         
         return self.encoder_model.predict(X_tokens, verbose=0)
     
-    def predict(self, X_smiles):
+    def predict(self, X_smiles, return_residuals=False, y_true=None):
         """
         Predict target values from SMILES strings.
         
         Args:
             X_smiles: SMILES strings (n_samples,) or pandas Series
+            return_residuals: If True and y_true provided, return residuals too
+            y_true: True values for residual calculation
         
         Returns:
-            Predictions (n_samples, n_targets)
+            Predictions (n_samples, n_targets) or tuple of (predictions, residuals)
         """
         if self.model is None:
             raise ValueError("Model must be fitted before predict")
@@ -337,4 +389,10 @@ class TransformerModel:
         # Tokenize SMILES strings
         X_tokens = self.tokenizer.tokenize(X_smiles)
         
-        return self.model.predict(X_tokens, verbose=0)
+        predictions = self.model.predict(X_tokens, verbose=0)
+        
+        if return_residuals and y_true is not None:
+            residuals = y_true - predictions
+            return predictions, residuals
+        
+        return predictions
