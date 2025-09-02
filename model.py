@@ -38,6 +38,7 @@ warnings.filterwarnings('ignore')
 
 # Import configuration
 from config import EnvironmentConfig
+from residual_analysis import ResidualAnalyzer
 config = EnvironmentConfig()
 
 # Dimensionality reduction settings (only one method should be enabled at a time)
@@ -102,7 +103,7 @@ else:
 # Target columns
 TARGETS = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
 
-def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
+def main(cv_only=False, use_supplementary=True, model_type='lightgbm', run_residual_analysis=False):
     """
     Main function to train model and make predictions
     
@@ -110,6 +111,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         cv_only: If True, only run cross-validation and skip submission generation
         use_supplementary: If True, include supplementary datasets in training
         model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
+        run_residual_analysis: If True, perform residual analysis for all enabled models
     """
     print(f"=== Separate {model_type.upper()} Models for Polymer Prediction ===")
     
@@ -195,6 +197,10 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     print(f"\n=== Training Separate {model_type.upper()} Models for Each Target ===")
     predictions = np.zeros((len(X_test), len(target_columns)))
     
+    # Initialize models dictionary for residual analysis
+    models = {} if run_residual_analysis else None
+    smiles_train = train_df['SMILES'] if run_residual_analysis and USE_TRANSFORMER else None
+    
     # Model parameters
     if model_type == 'lightgbm':
         # Use parameters from config for single source of truth
@@ -278,6 +284,10 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
             # Make predictions
             predictions[:, i] = model.predict(X_test_final)
             print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+            
+            # Store model for residual analysis
+            if run_residual_analysis:
+                models[target] = (model, X_target_final, y_target)
         else:
             # Use median of available values if no samples
             predictions[:, i] = y_train[target].median()
@@ -292,6 +302,98 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         'Density': predictions[:, 3],
         'Rg': predictions[:, 4]
     })
+    
+    # Perform residual analysis if requested
+    if run_residual_analysis:
+        print("\n" + "="*60)
+        print("=== RESIDUAL ANALYSIS ===")
+        print("="*60)
+        
+        analyzer = ResidualAnalyzer()
+        all_residuals = {}
+        
+        # Analyze LightGBM/Ridge models
+        print(f"\n--- {model_type.upper()} Model Residuals ---")
+        for target, (model, X_data, y_true) in models.items():
+            if len(y_true) > 0:
+                y_pred = model.predict(X_data)
+                residuals = y_true.values - y_pred
+                all_residuals[f"{model_type}_{target}"] = residuals
+                
+                print(f"\n{target}:")
+                metrics = analyzer.compute_metrics(y_true.values, y_pred, target)
+                print(f"  MAE: {metrics.mae:.4f}")
+                print(f"  RMSE: {metrics.rmse:.4f}")
+                print(f"  R²: {metrics.r2:.4f}")
+                print(f"  Mean Residual: {metrics.mean_residual:.4f}")
+                print(f"  Std Residual: {metrics.std_residual:.4f}")
+        
+        # Analyze Transformer residuals if enabled
+        if USE_TRANSFORMER:
+            print("\n--- Transformer Model Residuals ---")
+            try:
+                from transformer_model import TransformerModel
+                
+                # Get transformer from preprocessing (if it was saved)
+                # For now, we'll train a fresh one for residual analysis
+                if smiles_train is not None:
+                    print("Training transformer for residual analysis...")
+                    transformer = TransformerModel(
+                        vocab_size=None,
+                        target_dim=5,
+                        latent_dim=TRANSFORMER_LATENT_DIM,
+                        num_heads=1,
+                        num_encoder_layers=1
+                    )
+                    
+                    # Prepare target matrix
+                    y_matrix = y_train[target_columns].values
+                    
+                    # Fit and get residuals
+                    y_pred, residuals = transformer.fit_predict(
+                        smiles_train.values, y_matrix,
+                        epochs=10,
+                        batch_size=32,
+                        return_residuals=True
+                    )
+                    
+                    # Analyze each target
+                    for i, target in enumerate(target_columns):
+                        mask = ~np.isnan(y_matrix[:, i])
+                        if mask.sum() > 0:
+                            y_true_target = y_matrix[mask, i]
+                            y_pred_target = y_pred[mask, i]
+                            residuals_target = residuals[mask, i]
+                            all_residuals[f"transformer_{target}"] = residuals_target
+                            
+                            print(f"\n{target}:")
+                            metrics = analyzer.compute_metrics(y_true_target, y_pred_target, target)
+                            print(f"  MAE: {metrics.mae:.4f}")
+                            print(f"  RMSE: {metrics.rmse:.4f}")
+                            print(f"  R²: {metrics.r2:.4f}")
+                            print(f"  Mean Residual: {metrics.mean_residual:.4f}")
+                            print(f"  Std Residual: {metrics.std_residual:.4f}")
+            except Exception as e:
+                print(f"Error analyzing transformer residuals: {e}")
+        
+        # Analyze PCA residuals if enabled
+        if PCA_VARIANCE_THRESHOLD is not None:
+            print("\n--- PCA Reconstruction Residuals ---")
+            # PCA was applied during preprocessing, we need to get reconstruction error
+            # This would require storing the PCA object during preprocessing
+            print("PCA reconstruction analysis: Feature reduction was applied, residuals reflect reduced feature space")
+        
+        # Generate comparison report
+        if len(all_residuals) > 1:
+            print("\n" + "="*60)
+            print("=== MODEL COMPARISON ===")
+            print("="*60)
+            comparison = analyzer.compare_models_dict(all_residuals)
+            print(comparison)
+        
+        print("\n" + "="*60)
+        print("=== END RESIDUAL ANALYSIS ===")
+        print("="*60)
     
     # Save submission
     print(f"\nSaving submission to {SUBMISSION_PATH}...")
@@ -311,6 +413,7 @@ if __name__ == "__main__":
     # Check for command line arguments
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
+    residual_analysis = '--residual-analysis' in sys.argv or '--residuals' in sys.argv
     
     # Check for model type
     model_type = 'lightgbm'  # default
@@ -326,4 +429,4 @@ if __name__ == "__main__":
         USE_AUTOENCODER = False
         print("No dimensionality reduction will be used")
     
-    main(cv_only=cv_only, use_supplementary=not no_supplement, model_type=model_type)
+    main(cv_only=cv_only, use_supplementary=not no_supplement, model_type=model_type, run_residual_analysis=residual_analysis)

@@ -72,6 +72,57 @@ class ResidualAnalyzer:
         self.residuals_store = {}
         self.predictions_store = {}
         self.true_values_store = {}
+    
+    def compute_metrics(self, y_true: np.ndarray, y_pred: np.ndarray, target_name: str = "unknown") -> ResidualMetrics:
+        """
+        Compute residual metrics for predictions.
+        
+        Args:
+            y_true: True values
+            y_pred: Predicted values
+            target_name: Name of the target variable
+            
+        Returns:
+            ResidualMetrics object with computed metrics
+        """
+        from scipy import stats
+        
+        residuals = y_true - y_pred
+        
+        # Calculate metrics
+        mae = mean_absolute_error(y_true, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        r2 = r2_score(y_true, y_pred)
+        mean_residual = np.mean(residuals)
+        std_residual = np.std(residuals)
+        median_residual = np.median(residuals)
+        q25_residual = np.percentile(residuals, 25)
+        q75_residual = np.percentile(residuals, 75)
+        iqr_residual = q75_residual - q25_residual
+        skewness = stats.skew(residuals)
+        kurtosis = stats.kurtosis(residuals)
+        
+        # Detect outliers (residuals beyond 3 standard deviations)
+        outliers = np.abs(residuals - mean_residual) > 3 * std_residual
+        outliers_count = np.sum(outliers)
+        outliers_percentage = outliers_count / len(residuals) * 100
+        
+        return ResidualMetrics(
+            target=target_name,
+            mae=mae,
+            rmse=rmse,
+            r2=r2,
+            mean_residual=mean_residual,
+            std_residual=std_residual,
+            median_residual=median_residual,
+            q25_residual=q25_residual,
+            q75_residual=q75_residual,
+            iqr_residual=iqr_residual,
+            skewness=skewness,
+            kurtosis=kurtosis,
+            outliers_count=outliers_count,
+            outliers_percentage=outliers_percentage
+        )
         
     def compute_residuals(self, 
                          y_true: np.ndarray, 
@@ -316,6 +367,55 @@ class ResidualAnalyzer:
             json.dump(data, f, indent=2)
         
         print(f"Saved residual metrics to {file_path}")
+    
+    def compare_models_dict(self, models_residuals: Dict[str, np.ndarray]) -> str:
+        """
+        Compare residuals from different models (simplified version).
+        
+        Args:
+            models_residuals: Dictionary mapping model names to residual arrays
+            
+        Returns:
+            String summary of comparison
+        """
+        comparison_lines = []
+        comparison_lines.append("\nModel Comparison Summary:")
+        comparison_lines.append("-" * 50)
+        
+        metrics_by_model = {}
+        for model_name, residuals in models_residuals.items():
+            # Compute basic metrics
+            mae = np.mean(np.abs(residuals))
+            rmse = np.sqrt(np.mean(residuals**2))
+            mean_res = np.mean(residuals)
+            std_res = np.std(residuals)
+            
+            metrics_by_model[model_name] = {
+                'MAE': mae,
+                'RMSE': rmse,
+                'Mean': mean_res,
+                'Std': std_res
+            }
+            
+            comparison_lines.append(f"\n{model_name}:")
+            comparison_lines.append(f"  MAE: {mae:.4f}")
+            comparison_lines.append(f"  RMSE: {rmse:.4f}")
+            comparison_lines.append(f"  Mean Residual: {mean_res:.4f}")
+            comparison_lines.append(f"  Std Residual: {std_res:.4f}")
+        
+        # Find best model for each metric
+        if len(metrics_by_model) > 1:
+            comparison_lines.append("\n" + "="*50)
+            comparison_lines.append("Best Models by Metric:")
+            comparison_lines.append("-" * 50)
+            
+            for metric in ['MAE', 'RMSE']:
+                best_model = min(metrics_by_model.keys(), 
+                               key=lambda x: metrics_by_model[x][metric])
+                best_value = metrics_by_model[best_model][metric]
+                comparison_lines.append(f"{metric}: {best_model} ({best_value:.4f})")
+        
+        return "\n".join(comparison_lines)
     
     def compare_models(self, target_names: List[str]) -> pd.DataFrame:
         """
