@@ -794,16 +794,16 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
                 vocab_size=None,  # Will use default tokenizer vocab
                 target_dim=5,
                 latent_dim=transformer_latent_dim,  # Use provided latent dimension
-                num_heads=4,  # Reduced heads for speed
-                num_encoder_layers=2,  # Single layer for speed
-                num_decoder_layers=2,  # Single layer for speed
-                ff_dim=512,  # Reduced FF dimension
+                num_heads=1,  # Reduced heads for speed
+                num_encoder_layers=1,  # Single layer for speed
+                num_decoder_layers=1,  # Single layer for speed
+                ff_dim=64,  # Reduced FF dimension
                 random_state=42,
                 max_length=100  # Reduced max length for memory efficiency
             )
             
             # Fit transformer on training data using SMILES directly (optimized)
-            transformer.fit(smiles_train, y_train, epochs=3, batch_size=64, verbose=0)
+            transformer.fit(smiles_train, y_train, epochs=3, batch_size=128, verbose=0)
             
             # Extract latent features
             transformer_features_train = transformer.transform(smiles_train)

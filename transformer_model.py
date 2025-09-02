@@ -21,33 +21,15 @@ def set_seeds(seed=42):
 
 
 class SMILESTokenizer:
-    """SMILES tokenizer using DeepChem's SmilesTokenizer."""
+    """Character-level SMILES tokenizer."""
     
-    def __init__(self, max_length=150, use_deepchem=True):
+    def __init__(self, max_length=150):
         self.max_length = max_length
-        self.use_deepchem = use_deepchem
-        
-        if use_deepchem:
-            try:
-                from deepchem.feat.smiles_tokenizer import BasicSmilesTokenizer
-                import os
-                os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid warning
-                
-                # Use BasicSmilesTokenizer which doesn't require vocab file
-                self.basic_tokenizer = BasicSmilesTokenizer()
-                # Build character vocabulary for numeric encoding
-                self.chars = list('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()[]+-=#@/*.:,;$%&\\|')
-                self._build_vocab()
-            except Exception as e:
-                print(f"Failed to load DeepChem tokenizer ({e}), falling back to character-level")
-                self.use_deepchem = False
-        
-        if not self.use_deepchem:
-            self.char_to_idx = {}
-            self.idx_to_char = {}
-            # Common SMILES characters
-            self.chars = list('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()[]+-=#@/*.:,;$%&\\|')
-            self._build_vocab()
+        self.char_to_idx = {}
+        self.idx_to_char = {}
+        # Common SMILES characters
+        self.chars = list('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()[]+-=#@/*.:,;$%&\\|')
+        self._build_vocab()
     
     def _build_vocab(self):
         """Build character vocabulary for fallback."""
@@ -66,29 +48,15 @@ class SMILESTokenizer:
         
         tokenized = []
         
-        if self.use_deepchem:
-            for smiles in smiles_list:
-                smiles_str = str(smiles) if smiles is not None else ''
-                # Use BasicSmilesTokenizer to get character tokens
-                char_tokens = self.basic_tokenizer.tokenize(smiles_str)
-                # Convert to indices
-                tokens = []
-                for char in char_tokens[:self.max_length]:
-                    tokens.append(self.char_to_idx.get(char, self.char_to_idx['<UNK>']))
-                # Pad to max_length
-                while len(tokens) < self.max_length:
-                    tokens.append(self.char_to_idx['<PAD>'])
-                tokenized.append(tokens[:self.max_length])
-        else:
-            for smiles in smiles_list:
-                tokens = []
-                smiles_str = str(smiles) if smiles is not None else ''
-                for char in smiles_str[:self.max_length]:
-                    tokens.append(self.char_to_idx.get(char, self.char_to_idx['<UNK>']))
-                # Pad to max_length
-                while len(tokens) < self.max_length:
-                    tokens.append(self.char_to_idx['<PAD>'])
-                tokenized.append(tokens[:self.max_length])
+        for smiles in smiles_list:
+            tokens = []
+            smiles_str = str(smiles) if smiles is not None else ''
+            for char in smiles_str[:self.max_length]:
+                tokens.append(self.char_to_idx.get(char, self.char_to_idx['<UNK>']))
+            # Pad to max_length
+            while len(tokens) < self.max_length:
+                tokens.append(self.char_to_idx['<PAD>'])
+            tokenized.append(tokens[:self.max_length])
         
         return np.array(tokenized, dtype=np.int32)
 

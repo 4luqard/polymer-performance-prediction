@@ -29,40 +29,39 @@ def data_paths():
 def test_load_without_extra_datasets(data_paths):
     """Test loading without extra datasets"""
     # Load without extra datasets
-    X_train, y_train, X_test = load_competition_data(
+    train_df, test_df = load_competition_data(
         train_path=data_paths['train'],
         test_path=data_paths['test'],
         use_supplementary=False
     )
     
-    assert X_train is not None, "X_train should not be None"
-    assert y_train is not None, "y_train should not be None"
-    assert X_test is not None, "X_test should not be None"
+    assert train_df is not None, "train_df should not be None"
+    assert test_df is not None, "test_df should not be None"
     
-    original_train_size = len(X_train)
+    original_train_size = len(train_df)
     assert original_train_size > 0, "Should have training data"
 
 def test_load_with_extra_datasets(data_paths):
     """Test loading with extra datasets"""
     # Load with extra datasets  
-    X_train_extra, y_train_extra, X_test_extra = load_competition_data(
+    train_df_extra, test_df_extra = load_competition_data(
         train_path=data_paths['train'],
         test_path=data_paths['test'],
-        supplement_paths=data_paths['supp'],
+        supp_paths=data_paths['supp'],
         use_supplementary=True
     )
     
-    assert X_train_extra is not None, "X_train with extra should not be None"
-    assert y_train_extra is not None, "y_train with extra should not be None"
+    assert train_df_extra is not None, "train_df with extra should not be None"
+    assert test_df_extra is not None, "test_df with extra should not be None"
     
     # Should have more data with extra datasets
-    X_train, y_train, _ = load_competition_data(
+    train_df, _ = load_competition_data(
         train_path=data_paths['train'],
         test_path=data_paths['test'],
         use_supplementary=False
     )
     
-    assert len(X_train_extra) >= len(X_train), "Should have at least as much data with supplements"
+    assert len(train_df_extra) >= len(train_df), "Should have at least as much data with supplements"
 
 def test_new_smiles_added(data_paths):
     """Test that new unique SMILES are added"""
@@ -117,22 +116,25 @@ def test_target_values_filled(data_paths):
 def test_data_consistency(data_paths):
     """Test data consistency after integration"""
     # Load with extra datasets
-    X_train, y_train, X_test = load_competition_data(
+    train_df, test_df = load_competition_data(
         train_path=data_paths['train'],
         test_path=data_paths['test'],
-        supplement_paths=data_paths['supp'],
+        supp_paths=data_paths['supp'],
         use_supplementary=True
     )
     
     # Check shapes match
-    assert len(X_train) == len(y_train), "X_train and y_train should have same length"
+    # Check that the dataframe has expected columns
+    assert 'SMILES' in train_df.columns, "Should have SMILES column"
     
-    # Check y_train has 5 targets
-    assert y_train.shape[1] == 5, "Should have 5 target columns"
+    # Check that dataframe has target columns
+    target_cols = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    for col in target_cols:
+        assert col in train_df.columns, f"Should have {col} column"
     
     # Check no duplicate SMILES
-    unique_smiles = pd.Series(X_train).nunique()
-    assert unique_smiles == len(X_train), "Should have no duplicate SMILES after deduplication"
+    unique_smiles = train_df['SMILES'].nunique()
+    assert unique_smiles == len(train_df), "Should have no duplicate SMILES after deduplication"
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
