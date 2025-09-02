@@ -36,8 +36,9 @@ from data_processing import (
 import warnings
 warnings.filterwarnings('ignore')
 
-# Check if running on Kaggle or locally
-IS_KAGGLE = os.path.exists('/kaggle/input')
+# Import configuration
+from config import EnvironmentConfig
+config = EnvironmentConfig()
 
 # Dimensionality reduction settings (only one method should be enabled at a time)
 # PCA variance threshold - set to None to disable PCA
@@ -57,7 +58,7 @@ USE_TRANSFORMER = True  # Whether to add transformer latent features
 TRANSFORMER_LATENT_DIM = 32  # Number of transformer latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
-if not IS_KAGGLE:
+if not config.is_kaggle:
     from src.competition_metric import neurips_polymer_metric
     from src.diagnostics import CVDiagnostics
     from cv import perform_cross_validation, perform_multi_seed_cv
@@ -67,17 +68,17 @@ if not IS_KAGGLE:
 # Already checked above
 
 # Set paths based on environment
-if IS_KAGGLE:
+if config.is_kaggle:
     # Kaggle competition paths
-    TRAIN_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/train.csv'
-    TEST_PATH = '/kaggle/input/neurips-open-polymer-prediction-2025/test.csv'
-    SUBMISSION_PATH = 'submission.csv'
+    TRAIN_PATH = config.data_dir / 'train.csv'
+    TEST_PATH = config.data_dir / 'test.csv'
+    SUBMISSION_PATH = config.output_dir / 'submission.csv'
     
     # Supplementary dataset paths
     SUPP_PATHS = [
-        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset1.csv',
-        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset2.csv',
-        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset3.csv',
+        config.data_dir / 'train_supplement/dataset1.csv',
+        config.data_dir / 'train_supplement/dataset2.csv',
+        config.data_dir / 'train_supplement/dataset3.csv',
         '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv',
         '/kaggle/input/extra-dataset-with-smilestgpidpolimers-class/TgSS_enriched_cleaned.csv',
         '/kaggle/input/polymer-tg-density-excerpt/tg_density.csv'
@@ -170,7 +171,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     
     # Run cross-validation if requested (but not on Kaggle)
     if cv_only:
-        if IS_KAGGLE:
+        if config.is_kaggle:
             print("\n⚠️  Cross-validation is not available in Kaggle notebooks")
             print("Proceeding with submission generation instead...")
         else:
@@ -197,7 +198,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
     # Model parameters
     if model_type == 'lightgbm':
         # Use parameters from config for single source of truth
-        if IS_KAGGLE:
+        if config.is_kaggle:
             # Need to define params inline for Kaggle since we can't import config
             lgb_params = {
                 'objective': 'regression_l1',
