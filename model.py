@@ -39,21 +39,15 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import configuration
-from config import EnvironmentConfig
+from config import CONFIG, LIGHTGBM_PARAMS
 from residual_analysis import ResidualAnalyzer
-config = EnvironmentConfig()
+config = CONFIG
 
 # Dimensionality reduction settings (only one method should be enabled at a time)
-# PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = 0.99999
-
-# Autoencoder settings - set to True to use autoencoder instead of PCA
-USE_AUTOENCODER = False
 AUTOENCODER_LATENT_DIM = 32  # Number of latent dimensions
 EPOCHS = 20
 
-# PLS settings - set to True to use PLS instead of PCA/autoencoder
-USE_PLS = False  # Whether to use PLS for dimensionality reduction
+# PLS settings
 PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Transformer settings - set to True to add transformer features
@@ -65,7 +59,6 @@ if not config.is_kaggle:
     from src.competition_metric import neurips_polymer_metric
     from src.diagnostics import CVDiagnostics
     from cv import perform_cross_validation, perform_multi_seed_cv
-    from config import LIGHTGBM_PARAMS
 
 
 # Already checked above
@@ -91,7 +84,12 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm', run_resid
     print(f"=== Separate {model_type.upper()} Models for Polymer Prediction ===")
     
     # Validate dimensionality reduction settings
-    dim_reduction_methods = sum([USE_AUTOENCODER, USE_PLS, PCA_VARIANCE_THRESHOLD is not None])
+    dr_cfg = config.dim_reduction
+    dim_reduction_methods = sum([
+        dr_cfg.use_autoencoder,
+        dr_cfg.use_pls,
+        dr_cfg.pca_variance_threshold is not None,
+    ])
     if dim_reduction_methods > 1:
         raise ValueError("Only one dimensionality reduction method should be enabled at a time")
     
@@ -132,18 +130,19 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm', run_resid
     
     # Apply preprocessing using imported function
     X_train_preprocessed, X_test_preprocessed = preprocess_data(
-        X_train, X_test, 
-        use_autoencoder=USE_AUTOENCODER,
+        X_train,
+        X_test,
+        use_autoencoder=dr_cfg.use_autoencoder,
         autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-        pca_variance_threshold=PCA_VARIANCE_THRESHOLD,
-        use_pls=USE_PLS,
+        pca_variance_threshold=dr_cfg.pca_variance_threshold,
+        use_pls=dr_cfg.use_pls,
         pls_n_components=PLS_N_COMPONENTS,
         y_train=y_train,
         epochs=EPOCHS,
         use_transformer=USE_TRANSFORMER,
         transformer_latent_dim=TRANSFORMER_LATENT_DIM,
         smiles_train=train_df['SMILES'],
-        smiles_test=test_df['SMILES']
+        smiles_test=test_df['SMILES'],
     )
     
     # Run cross-validation if requested (but not on Kaggle)
@@ -352,7 +351,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm', run_resid
                 print(f"Error analyzing transformer residuals: {e}")
         
         # Analyze PCA residuals if enabled
-        if PCA_VARIANCE_THRESHOLD is not None:
+        if dr_cfg.pca_variance_threshold is not None:
             print("\n--- PCA Reconstruction Residuals ---")
             # PCA was applied during preprocessing, we need to get reconstruction error
             # This would require storing the PCA object during preprocessing
@@ -399,9 +398,9 @@ if __name__ == "__main__":
 
     # Check for no dimensionality reduction
     if '--no-dim-reduction' in sys.argv:
-        USE_PLS = False
-        PCA_VARIANCE_THRESHOLD = None
-        USE_AUTOENCODER = False
+        config.dim_reduction.use_pls = False
+        config.dim_reduction.pca_variance_threshold = None
+        config.dim_reduction.use_autoencoder = False
         print("No dimensionality reduction will be used")
     
     main(cv_only=cv_only, use_supplementary=not no_supplement, model_type=model_type, run_residual_analysis=residual_analysis)
