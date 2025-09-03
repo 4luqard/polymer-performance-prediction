@@ -7,6 +7,19 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 from config import CONFIG
 
+__all__ = [
+    "load_raw_data",
+    "load_preprocessed_data",
+    "save_preprocessed_data",
+    "split_features_targets",
+    "handle_missing_values",
+    "load_cv_fold",
+    "prepare_submission",
+    "check_data_availability",
+    "get_data_stats",
+    "load_competition_data",
+]
+
 
 def load_raw_data(data_type: str = 'train') -> pd.DataFrame:
     """
@@ -252,3 +265,59 @@ def get_data_stats(df: pd.DataFrame) -> Dict[str, Any]:
             }
     
     return stats
+
+
+def load_competition_data(train_path, test_path, supp_paths=None, use_supplementary=True):
+    """Load main and supplementary competition datasets."""
+    print("Loading training data...")
+
+    train_df = pd.read_csv(train_path)
+    train_df['new_sim'] = True
+    print(f"Main training data shape: {train_df.shape}")
+
+    if use_supplementary and supp_paths:
+        print("\nLoading supplementary datasets...")
+        all_train_dfs = [train_df]
+
+        for supp_path in supp_paths:
+            try:
+                supp_df = pd.read_csv(supp_path)
+                if 'dataset1.csv' in supp_path and 'TC_mean' in supp_df.columns:
+                    supp_df = supp_df.rename(columns={'TC_mean': 'Tc'})
+                    print("Renamed TC_mean to Tc in dataset1")
+
+                if 'id' not in supp_df.columns:
+                    supp_df['id'] = [
+                        f"supp_{supp_path.split('/')[-1].split('.')[0]}_{i}"
+                        for i in range(len(supp_df))
+                    ]
+
+                supp_df['new_sim'] = False
+                print(f"Loaded {supp_path}: {supp_df.shape}")
+                all_train_dfs.append(supp_df)
+            except Exception as e:
+                print(f"Could not load {supp_path}: {e}")
+
+        train_df = pd.concat(all_train_dfs, ignore_index=True)
+        print(f"\nCombined training data shape: {train_df.shape}")
+    else:
+        print("\n** Using ONLY main training data (no supplementary datasets) **")
+
+    print("\nLoading test data...")
+    test_df = pd.read_csv(test_path)
+    test_df['new_sim'] = True
+    print(f"Test data shape: {test_df.shape}")
+
+    print("\nRemoving duplicates from training data...")
+    original_count = len(train_df)
+    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    train_df['target_count'] = train_df[target_columns].notna().sum(axis=1)
+    train_df = train_df.sort_values(['target_count', 'new_sim'], ascending=[False, False])
+    train_df = train_df.drop_duplicates(subset=['SMILES'], keep='first')
+    train_df = train_df.drop('target_count', axis=1)
+
+    duplicate_count = original_count - len(train_df)
+    print(f"Removed {duplicate_count} duplicate rows")
+    print(f"Final training data shape: {train_df.shape}")
+
+    return train_df, test_df

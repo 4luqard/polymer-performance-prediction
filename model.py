@@ -29,9 +29,10 @@ from data_processing import (
     apply_autoencoder,
     select_features_for_target,
     preprocess_data,
-    load_competition_data,
     TARGET_FEATURES
 )
+
+from data_helpers import load_competition_data
 
 import warnings
 warnings.filterwarnings('ignore')
