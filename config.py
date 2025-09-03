@@ -3,7 +3,16 @@ Centralized configuration for the NeurIPS polymer prediction project.
 """
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List
+
+
+@dataclass
+class DatasetPaths:
+    train: Path
+    test: Path
+    submission: Path
+    supplementary: List[Path]
 
 
 class EnvironmentConfig:
@@ -25,11 +34,42 @@ class EnvironmentConfig:
             self.data_dir = self.project_root / 'data'
             self.output_dir = self.project_root / 'output'
             self.cv_dir = self.data_dir / 'cv'
-        
+
         # Common paths
         self.train_file = 'train.csv'
         self.test_file = 'test.csv'
         self.sample_submission_file = 'sample_submission.csv'
+
+        path_map = {
+            True: DatasetPaths(
+                train=self.data_dir / self.train_file,
+                test=self.data_dir / self.test_file,
+                submission=self.output_dir / 'submission.csv',
+                supplementary=[
+                    self.data_dir / 'train_supplement/dataset1.csv',
+                    self.data_dir / 'train_supplement/dataset2.csv',
+                    self.data_dir / 'train_supplement/dataset3.csv',
+                    self.data_dir / 'train_supplement/dataset4.csv',
+                    Path('/kaggle/input/extra-dataset-with-smilestgpidpolimers-class/TgSS_enriched_cleaned.csv'),
+                    Path('/kaggle/input/polymer-tg-density-excerpt/tg_density.csv')
+                ]
+            ),
+            False: DatasetPaths(
+                train=self.data_dir / 'raw/train.csv',
+                test=self.data_dir / 'raw/test.csv',
+                submission=self.output_dir / 'submission.csv',
+                supplementary=[
+                    self.data_dir / 'raw/train_supplement/dataset1.csv',
+                    self.data_dir / 'raw/train_supplement/dataset2.csv',
+                    self.data_dir / 'raw/train_supplement/dataset3.csv',
+                    self.data_dir / 'raw/train_supplement/dataset4.csv',
+                    self.data_dir / 'raw/extra_datasets/TgSS_enriched_cleaned.csv',
+                    self.data_dir / 'raw/extra_datasets/tg_density.csv'
+                ]
+            )
+        }
+
+        self.dataset_paths = path_map[self.is_kaggle]
     
     def _setup_model_params(self):
         """Setup model parameters based on environment."""
@@ -82,6 +122,10 @@ class EnvironmentConfig:
     def get_data_path(self, filename: str) -> Path:
         """Get full path for a data file."""
         return self.data_dir / filename
+
+    def get_dataset_paths(self) -> DatasetPaths:
+        """Return dataset paths for current environment."""
+        return self.dataset_paths
     
     def get_cv_path(self, fold: int) -> Dict[str, Path]:
         """Get CV fold paths."""

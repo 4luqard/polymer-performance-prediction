@@ -68,37 +68,10 @@ if not config.is_kaggle:
 
 # Already checked above
 
-# Set paths based on environment
-if config.is_kaggle:
-    # Kaggle competition paths
-    TRAIN_PATH = config.data_dir / 'train.csv'
-    TEST_PATH = config.data_dir / 'test.csv'
-    SUBMISSION_PATH = config.output_dir / 'submission.csv'
-    
-    # Supplementary dataset paths
-    SUPP_PATHS = [
-        config.data_dir / 'train_supplement/dataset1.csv',
-        config.data_dir / 'train_supplement/dataset2.csv',
-        config.data_dir / 'train_supplement/dataset3.csv',
-        '/kaggle/input/neurips-open-polymer-prediction-2025/train_supplement/dataset4.csv',
-        '/kaggle/input/extra-dataset-with-smilestgpidpolimers-class/TgSS_enriched_cleaned.csv',
-        '/kaggle/input/polymer-tg-density-excerpt/tg_density.csv'
-    ]
-else:
-    # Local paths
-    TRAIN_PATH = 'data/raw/train.csv'
-    TEST_PATH = 'data/raw/test.csv'
-    SUBMISSION_PATH = 'output/submission.csv'
-    
-    # Supplementary dataset paths
-    SUPP_PATHS = [
-        'data/raw/train_supplement/dataset1.csv',
-        'data/raw/train_supplement/dataset2.csv',
-        'data/raw/train_supplement/dataset3.csv',
-        'data/raw/train_supplement/dataset4.csv',
-        'data/raw/extra_datasets/TgSS_enriched_cleaned.csv',
-        'data/raw/extra_datasets/tg_density.csv'
-    ]
+# Set dataset paths
+paths = config.get_dataset_paths()
+TRAIN_PATH, TEST_PATH, SUBMISSION_PATH = paths.train, paths.test, paths.submission
+SUPP_PATHS = paths.supplementary
 
 # Target columns
 TARGETS = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
