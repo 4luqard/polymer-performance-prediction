@@ -22,6 +22,8 @@ from model import (
     prepare_features, select_features_for_target
 )
 
+from src.constants import TARGET_COLUMNS
+
 def format_tree_node(node, feature_names, depth=0, max_depth=5):
     """Format tree node in human-readable format"""
     indent = "  " * depth
@@ -83,7 +85,7 @@ def train_and_visualize_final_trees():
     X_test = prepare_features(test_df)
     
     # Prepare target variables
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    target_columns = TARGET_COLUMNS
     y_train = train_df[target_columns]
     
     # LightGBM parameters

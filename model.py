@@ -19,6 +19,8 @@ import sys
 import os
 import math
 
+from src.constants import TARGET_COLUMNS
+
 # Import data processing functions
 from data_processing import (
     calculate_main_branch_atoms,
@@ -74,7 +76,7 @@ TRAIN_PATH, TEST_PATH, SUBMISSION_PATH = paths.train, paths.test, paths.submissi
 SUPP_PATHS = paths.supplementary
 
 # Target columns
-TARGETS = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+TARGETS = TARGET_COLUMNS
 
 def main(cv_only=False, use_supplementary=True, model_type='lightgbm', run_residual_analysis=False):
     """
@@ -108,7 +110,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm', run_resid
     X_test = prepare_features(test_df)
     
     # Prepare target variables
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    target_columns = TARGET_COLUMNS
     y_train = train_df[target_columns]
     
     # Print feature statistics
