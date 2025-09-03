@@ -8,17 +8,15 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import Ridge
 from sklearn.decomposition import PCA
 import lightgbm as lgb
-from sklearn.metrics import mean_squared_error
 import warnings
 warnings.filterwarnings('ignore')
 
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
 from src.diagnostics import CVDiagnostics
-from config import LIGHTGBM_PARAMS
+from config import MODEL_REGISTRY
 
 # PCA variance threshold - should match the one in model.py
 PCA_VARIANCE_THRESHOLD = None
@@ -169,17 +167,12 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                                 X_val_final = X_val_scaled
                 
                 if len(X_target_final) > 0:
-                    
-                    # Train model based on type
+
+                    model = MODEL_REGISTRY.get_model(model_type, target, random_state=random_seed)
+
                     if model_type == 'lightgbm':
-                        # Use parameters from config for single source of truth
-                        lgb_params = LIGHTGBM_PARAMS.copy()
-                        lgb_params['random_state'] = random_seed  # Override seed for CV
-                        model = lgb.LGBMRegressor(**lgb_params)
-                        
-                        # For LightGBM, create a validation split from training data
                         from sklearn.model_selection import train_test_split
-                        if len(X_target_final) > 20:  # Only split if we have enough data
+                        if len(X_target_final) > 20:
                             X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
                                 X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
                             )
@@ -187,16 +180,6 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         else:
                             model.fit(X_target_final, y_target_complete)
                     else:
-                        # Ridge model with target-specific alpha
-                        target_alphas = {
-                            'Tg': 10.0,
-                            'FFV': 1.0,
-                            'Tc': 10.0,
-                            'Density': 5.0,
-                            'Rg': 10.0
-                        }
-                        alpha = target_alphas.get(target, 1.0)
-                        model = Ridge(alpha=alpha, random_state=random_seed)
                         model.fit(X_target_final, y_target_complete)
                     
                     # Initialize predictions with median for all samples
@@ -217,8 +200,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     # Track target training if diagnostics enabled
                     if cv_diagnostics:
                         features_used = list(X_fold_train_selected.columns) if hasattr(X_fold_train_selected, 'columns') else [f'feature_{j}' for j in range(X_fold_train_selected.shape[1])]
-                        # Pass alpha value for diagnostics (use 1.0 for LightGBM as placeholder)
-                        alpha_for_diagnostics = alpha if model_type == 'ridge' else 1.0
+                        alpha_for_diagnostics = getattr(model, 'alpha', 1.0)
                         cv_diagnostics.track_target_training(
                             fold, target, 
                             len(X_target_complete), 

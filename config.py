@@ -219,64 +219,54 @@ class DimensionalityReductionConfig:
 
 class ModelRegistry:
     """Registry for model types and configurations."""
-    
-    def __init__(self):
+
+    def __init__(self, config: "EnvironmentConfig"):
+        targets = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
         self.models = {
             'lgbm': {
                 'class': 'lightgbm.LGBMRegressor',
-                'params': 'lgb_params',
+                'params': {t: config.lgb_params.copy() for t in targets},
                 'supports_multioutput': False
-            },
-            'transformer': {
-                'class': 'transformer_model.TransformerModel',
-                'params': 'transformer_params',
-                'supports_multioutput': True
             },
             'ridge': {
                 'class': 'sklearn.linear_model.Ridge',
-                'params': {'alpha': 1.0, 'random_state': 42},
-                'supports_multioutput': False
-            },
-            'rf': {
-                'class': 'sklearn.ensemble.RandomForestRegressor',
-                'params': {'n_estimators': 100, 'random_state': 42, 'n_jobs': -1},
+                'params': {
+                    'Tg': {'alpha': 10.0, 'random_state': 42},
+                    'FFV': {'alpha': 1.0, 'random_state': 42},
+                    'Tc': {'alpha': 10.0, 'random_state': 42},
+                    'Density': {'alpha': 5.0, 'random_state': 42},
+                    'Rg': {'alpha': 10.0, 'random_state': 42}
+                },
                 'supports_multioutput': False
             }
         }
-    
-    def get_model(self, model_type: str, config: EnvironmentConfig):
-        """Get model instance by type."""
+
+    def get_model(self, model_type: str, target: str, random_state: int | None = None):
+        """Get model instance by type and target."""
         if model_type not in self.models:
             raise ValueError(f"Unknown model type: {model_type}")
-        
+
         model_info = self.models[model_type]
-        
-        # Get parameters
-        if isinstance(model_info['params'], str):
-            params = getattr(config, model_info['params'])
-        else:
-            params = model_info['params']
-        
-        # Import and instantiate model
+        if target not in model_info['params']:
+            raise ValueError(f"Unknown target: {target}")
+
+        params = model_info['params'][target].copy()
+        if random_state is not None:
+            params['random_state'] = random_state
+
         module_name, class_name = model_info['class'].rsplit('.', 1)
-        
+
         if module_name == 'lightgbm':
             import lightgbm as lgb
             return lgb.LGBMRegressor(**params)
-        elif module_name == 'transformer_model':
-            from transformer_model import TransformerModel
-            return TransformerModel(**params)
         elif module_name.startswith('sklearn'):
             from sklearn.linear_model import Ridge
-            from sklearn.ensemble import RandomForestRegressor
-            
+
             if class_name == 'Ridge':
                 return Ridge(**params)
-            elif class_name == 'RandomForestRegressor':
-                return RandomForestRegressor(**params)
-        
+
         raise ValueError(f"Could not instantiate model: {model_info['class']}")
-    
+
     def requires_multioutput_wrapper(self, model_type: str) -> bool:
         """Check if model needs MultiOutputRegressor wrapper."""
         return not self.models[model_type]['supports_multioutput']
@@ -284,7 +274,7 @@ class ModelRegistry:
 
 # Global configuration instance
 CONFIG = EnvironmentConfig()
-MODEL_REGISTRY = ModelRegistry()
+MODEL_REGISTRY = ModelRegistry(CONFIG)
 
 # Legacy support for old code
 LIGHTGBM_PARAMS = CONFIG.lgb_params
