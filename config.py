@@ -150,7 +150,7 @@ class EnvironmentConfig:
 
 class DimensionalityReductionConfig:
     """Configuration for dimensionality reduction methods."""
-    
+
     # Available methods
     METHODS = {
         'none': None,
@@ -159,16 +159,25 @@ class DimensionalityReductionConfig:
         'umap': 'UMAP',
         'tsne': 't-SNE'
     }
-    
-    def __init__(self, method: str = 'pca'):
+
+    def __init__(
+        self,
+        method: str = 'pca',
+        use_autoencoder: bool = False,
+        use_pls: bool = False,
+        pca_variance_threshold: Optional[float] = 0.99999,
+    ):
         self.method = method
+        self.use_autoencoder = use_autoencoder
+        self.use_pls = use_pls
+        self.pca_variance_threshold = pca_variance_threshold
         self.params = self._get_method_params(method)
-    
+
     def _get_method_params(self, method: str) -> Dict[str, Any]:
         """Get parameters for specific method."""
         params_map = {
             'pca': {
-                'variance_threshold': 0.99999,
+                'variance_threshold': self.pca_variance_threshold,
                 'n_components': None  # Determined by variance threshold
             },
             'autoencoder': {
@@ -189,12 +198,12 @@ class DimensionalityReductionConfig:
             'none': {}
         }
         return params_map.get(method, {})
-    
+
     def get_reducer(self):
         """Get the appropriate dimensionality reducer."""
         if self.method == 'pca':
             from sklearn.decomposition import PCA
-            return PCA(n_components=self.params['variance_threshold'])
+            return PCA(n_components=self.pca_variance_threshold)
         elif self.method == 'autoencoder':
             # Return custom autoencoder class
             return None  # Implemented separately
@@ -210,11 +219,11 @@ class DimensionalityReductionConfig:
             return TSNE(**self.params)
         else:
             return None
-    
+
     def _get_fallback_reducer(self):
         """Get fallback reducer if primary method unavailable."""
         from sklearn.decomposition import PCA
-        return PCA(n_components=0.99999)
+        return PCA(n_components=self.pca_variance_threshold or 0.99999)
 
 
 class ModelRegistry:

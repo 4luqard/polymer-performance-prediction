@@ -18,10 +18,7 @@ warnings.filterwarnings('ignore')
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
 from src.diagnostics import CVDiagnostics
-from config import LIGHTGBM_PARAMS
-
-# PCA variance threshold - should match the one in model.py
-PCA_VARIANCE_THRESHOLD = None
+from config import CONFIG, LIGHTGBM_PARAMS
 
 
 def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True):
@@ -120,8 +117,11 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         
                         # Apply PCA if enabled
                         pca = None
-                        if PCA_VARIANCE_THRESHOLD is not None:
-                            pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=random_seed)
+                        if CONFIG.dim_reduction.pca_variance_threshold is not None:
+                            pca = PCA(
+                                n_components=CONFIG.dim_reduction.pca_variance_threshold,
+                                random_state=random_seed,
+                            )
                             X_target_pca = pca.fit_transform(X_target_scaled)
                             X_target_final = X_target_pca
                         else:
