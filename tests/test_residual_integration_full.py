@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from residual_analysis import ResidualAnalyzer
+from src.residual_analysis import ResidualAnalyzer
 from src.utils.seed import set_global_seed
 import warnings
 warnings.filterwarnings('ignore')

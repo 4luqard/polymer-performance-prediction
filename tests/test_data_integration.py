@@ -8,7 +8,7 @@ import numpy as np
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from data_processing import load_competition_data
+from src.data_processing import load_competition_data
 from src.constants import TARGET_COLUMNS
 
 @pytest.fixture

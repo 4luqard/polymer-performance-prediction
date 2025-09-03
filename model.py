@@ -22,7 +22,7 @@ import math
 from src.constants import TARGET_COLUMNS
 
 # Import data processing functions
-from data_processing import (
+from src.data_processing import (
     calculate_main_branch_atoms,
     calculate_backbone_bonds,
     calculate_average_bond_length,
@@ -40,7 +40,7 @@ warnings.filterwarnings('ignore')
 
 # Import configuration
 from config import CONFIG, LIGHTGBM_PARAMS
-from residual_analysis import ResidualAnalyzer
+from src.residual_analysis import ResidualAnalyzer
 config = CONFIG
 
 # Dimensionality reduction settings (only one method should be enabled at a time)
@@ -58,7 +58,7 @@ TRANSFORMER_LATENT_DIM = 32  # Number of transformer latent dimensions
 if not config.is_kaggle:
     from src.competition_metric import neurips_polymer_metric
     from src.diagnostics import CVDiagnostics
-    from cv import perform_cross_validation, perform_multi_seed_cv
+    from src.cv import perform_cross_validation, perform_multi_seed_cv
 
 
 # Already checked above
