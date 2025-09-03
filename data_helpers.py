@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 from config import CONFIG
 
+from src.constants import TARGET_COLUMNS
+
 
 def load_raw_data(data_type: str = 'train') -> pd.DataFrame:
     """
@@ -86,7 +88,7 @@ def split_features_targets(df: pd.DataFrame,
         Tuple of (features_df, targets_df)
     """
     if target_cols is None:
-        target_cols = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+        target_cols = TARGET_COLUMNS
     
     # Find available target columns
     available_targets = [col for col in target_cols if col in df.columns]
@@ -235,7 +237,7 @@ def get_data_stats(df: pd.DataFrame) -> Dict[str, Any]:
     }
     
     # Check for target columns
-    target_cols = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    target_cols = TARGET_COLUMNS
     available_targets = [col for col in target_cols if col in df.columns]
     
     if available_targets:

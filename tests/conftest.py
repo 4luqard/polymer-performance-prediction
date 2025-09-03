@@ -12,6 +12,8 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
+from src.constants import TARGET_COLUMNS
+
 
 @pytest.fixture(scope="session")
 def project_root():
@@ -73,7 +75,7 @@ def mock_model_params():
 @pytest.fixture
 def target_columns():
     """Target column names."""
-    return ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    return TARGET_COLUMNS
 
 
 @pytest.fixture(scope="session")

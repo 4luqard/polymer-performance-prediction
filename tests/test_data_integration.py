@@ -9,6 +9,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 from data_processing import load_competition_data
+from src.constants import TARGET_COLUMNS
 
 @pytest.fixture
 def data_paths():
@@ -128,7 +129,7 @@ def test_data_consistency(data_paths):
     assert 'SMILES' in train_df.columns, "Should have SMILES column"
     
     # Check that dataframe has target columns
-    target_cols = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    target_cols = TARGET_COLUMNS
     for col in target_cols:
         assert col in train_df.columns, f"Should have {col} column"
     

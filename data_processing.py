@@ -18,6 +18,8 @@ from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
 
+from src.constants import TARGET_COLUMNS
+
 import keras
 from keras.models import Sequential, Model
 from keras.layers import Dense, Input
@@ -901,7 +903,7 @@ def load_competition_data(train_path, test_path, supp_paths=None, use_supplement
     original_count = len(train_df)
     
     # Count non-null target values for each row
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    target_columns = TARGET_COLUMNS
     train_df['target_count'] = train_df[target_columns].notna().sum(axis=1)
     
     # Sort by target_count (descending) and new_sim (True first) to prioritize rows with more data

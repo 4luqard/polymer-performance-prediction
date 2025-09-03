@@ -5,6 +5,8 @@ import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
 
+from src.constants import TARGET_COLUMNS
+
 
 class TestSMILESTokenizer:
     """Test suite for SMILESTokenizer."""
@@ -143,7 +145,7 @@ class TestIntegration:
         
         # Prepare data
         X = sample_dataframe['SMILES'].values
-        y = sample_dataframe[['Tg', 'FFV', 'Tc', 'Density', 'Rg']].values
+        y = sample_dataframe[TARGET_COLUMNS].values
         
         # Train model
         model.fit(X, y, epochs=1, batch_size=2, verbose=0)
