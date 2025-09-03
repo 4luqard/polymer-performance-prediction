@@ -9,6 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from residual_analysis import ResidualAnalyzer
+from src.utils.seed import set_global_seed
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -17,7 +18,7 @@ def test_residual_analyzer_with_multiple_models():
     analyzer = ResidualAnalyzer()
     
     # Create synthetic data
-    np.random.seed(42)
+    set_global_seed(42)
     n_samples = 100
     y_true = np.random.randn(n_samples)
     

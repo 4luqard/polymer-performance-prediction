@@ -29,6 +29,8 @@ def ignore_warn(*args, **kwargs):
     pass
 warnings.warn = ignore_warn
 
+from src.utils.seed import set_global_seed
+
 def calculate_main_branch_atoms(smiles):
     """
     Calculate the number of atoms in the main branch of a polymer.
@@ -542,30 +544,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     
     """
     # Set seeds for reproducibility
-    import numpy as np
-    import random
-    import os
-    
-    # Set all random seeds
-    np.random.seed(random_state)
-    random.seed(random_state)
-    os.environ['PYTHONHASHSEED'] = str(random_state)
-    
-    # Try to import tensorflow and set its seed
-    try:
-        import tensorflow as tf
-        tf.random.set_seed(random_state)
-        # For older versions of tensorflow/keras
-        if hasattr(tf, 'set_random_seed'):
-            tf.set_random_seed(random_state)
-    except ImportError:
-        # If tensorflow not available, try keras backend
-        try:
-            import keras.backend as K
-            if hasattr(K, 'set_random_seed'):
-                K.set_random_seed(random_state)
-        except:
-            pass    
+    set_global_seed(random_state)
     # Define encoder architecture
     input_dim = X_train.shape[1]
     encoder = Sequential([

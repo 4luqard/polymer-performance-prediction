@@ -2,24 +2,13 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-import random
 import os
 from typing import Optional, Tuple, Union
+from src.utils.seed import set_global_seed
 
 # Force CPU usage
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-
-def set_seeds(seed=42):
-    """Set all random seeds for reproducibility."""
-    np.random.seed(seed)
-    random.seed(seed)
-    tf.random.set_seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
-    os.environ['TF_DETERMINISTIC_OPS'] = '1'
-
 
 class SMILESTokenizer:
     """Character-level SMILES tokenizer."""
@@ -98,7 +87,7 @@ class TransformerModel:
         self.model = None
         self.encoder_model = None
         
-        set_seeds(random_state)
+        set_global_seed(random_state)
     
     def _encoder_block(self, inputs):
         """Single transformer encoder block."""
@@ -147,7 +136,7 @@ class TransformerModel:
     
     def build_model(self):
         """Build the transformer encoder-decoder model."""
-        set_seeds(self.random_state)
+        set_global_seed(self.random_state)
         
         # Input: tokenized SMILES sequences
         encoder_inputs = keras.Input(shape=(self.max_length,), dtype=tf.int32, name='smiles_tokens')
@@ -232,7 +221,7 @@ class TransformerModel:
         Returns:
             Training history
         """
-        set_seeds(self.random_state)
+        set_global_seed(self.random_state)
         
         if self.model is None:
             self.build_model()
