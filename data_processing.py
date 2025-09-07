@@ -653,6 +653,97 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         return X_train_encoded, X_test_encoded
 
 
+def apply_pca(X_train_scaled, X_test_scaled, variance_threshold):
+    """Apply PCA for dimensionality reduction"""
+    pca = PCA(n_components=variance_threshold, random_state=42, whiten=True)
+    X_train_reduced = pca.fit_transform(X_train_scaled)
+    X_test_reduced = pca.transform(X_test_scaled)
+    print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
+    print(f"Variance preserved: {pca.explained_variance_ratio_.sum():.4f}")
+    return X_train_reduced, X_test_reduced
+
+
+def apply_pls(X_train_scaled, X_test_scaled, y_train, n_components):
+    """Apply PLS for dimensionality reduction"""
+    if y_train is None:
+        raise ValueError("y_train is required for PLS dimensionality reduction")
+
+    max_components = min(X_train_scaled.shape[0], X_train_scaled.shape[1])
+    if n_components > max_components:
+        print(f"WARNING: Requested {n_components} PLS components exceeds maximum ({max_components})")
+        n_components = max_components
+
+    print(f"Applying PLS: {X_train_scaled.shape[1]} features -> {n_components} components")
+
+    y_mask = ~y_train.isna().all(axis=1)
+    if not y_mask.any():
+        print("WARNING: No samples with non-missing targets found for PLS fitting.")
+        print("Falling back to PCA for dimensionality reduction.")
+        return apply_pca(X_train_scaled, X_test_scaled, n_components)
+
+    X_train_pls = X_train_scaled[y_mask]
+    y_train_pls = y_train[y_mask].fillna(y_train[y_mask].mean())
+
+    pls = PLSRegression(n_components=n_components, scale=False)
+    pls.fit(X_train_pls, y_train_pls)
+
+    X_train_reduced = pls.transform(X_train_scaled)
+    X_test_reduced = pls.transform(X_test_scaled)
+    print(f"PLS fitted on {X_train_pls.shape[0]} samples with non-missing targets")
+    return X_train_reduced, X_test_reduced
+
+
+def add_transformer_features(X_train_preprocessed, X_test_preprocessed, y_train, smiles_train, smiles_test, transformer_latent_dim, epochs=3):
+    """Add transformer-based latent features"""
+    print(f"Adding transformer latent features (latent_dim={transformer_latent_dim})...")
+    try:
+        from transformer_model import TransformerModel
+
+        if smiles_train is None or smiles_test is None:
+            print("Error: SMILES data required for transformer. Skipping transformer features.")
+            return X_train_preprocessed, X_test_preprocessed
+
+        transformer = TransformerModel(
+            vocab_size=None,
+            target_dim=5,
+            latent_dim=transformer_latent_dim,
+            num_heads=4,
+            num_encoder_layers=2,
+            num_decoder_layers=2,
+            ff_dim=512,
+            random_state=42,
+            max_length=100,
+        )
+
+        transformer.fit(smiles_train, y_train, epochs=epochs, batch_size=64, verbose=0)
+
+        transformer_features_train = transformer.transform(smiles_train)
+        transformer_features_test = transformer.transform(smiles_test)
+
+        transformer_cols = [f"transformer_{i}" for i in range(transformer_latent_dim)]
+        X_train_with = pd.concat(
+            [
+                X_train_preprocessed,
+                pd.DataFrame(transformer_features_train, index=X_train_preprocessed.index, columns=transformer_cols),
+            ],
+            axis=1,
+        )
+        X_test_with = pd.concat(
+            [
+                X_test_preprocessed,
+                pd.DataFrame(transformer_features_test, index=X_test_preprocessed.index, columns=transformer_cols),
+            ],
+            axis=1,
+        )
+        print(f"Added {transformer_latent_dim} transformer features. New shape: {X_train_with.shape}")
+        return X_train_with, X_test_with
+    except ImportError:
+        print("Warning: transformer_model not found. Skipping transformer features.")
+    except Exception as e:
+        print(f"Warning: Error adding transformer features: {e}")
+    return X_train_preprocessed, X_test_preprocessed
+
+
 
 
 def select_features_for_target(X, target):
@@ -715,126 +806,51 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     X_test_scaled = global_scaler.transform(X_test_imputed)
     
     # Apply dimensionality reduction if enabled
-    global_pca = None
     if use_autoencoder:
         print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs)
-        X_train_preprocessed = pd.DataFrame(X_train_reduced)
-        X_test_preprocessed = pd.DataFrame(X_test_reduced)
+        X_train_reduced, X_test_reduced = apply_autoencoder(
+            X_train_scaled,
+            X_test_scaled,
+            y_train=y_train,
+            latent_dim=autoencoder_latent_dim,
+            epochs=epochs,
+        )
+        X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
+        X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
     elif use_pls:
-        if y_train is None:
-            raise ValueError("y_train is required for PLS dimensionality reduction")
-        
-        # Validate number of components
-        max_components = min(X_train_scaled.shape[0], X_train_scaled.shape[1])
-        if pls_n_components > max_components:
-            print(f"WARNING: Requested {pls_n_components} PLS components exceeds maximum ({max_components})")
-            pls_n_components = max_components
-        
-        print(f"Applying PLS: {X_train_scaled.shape[1]} features -> {pls_n_components} components")
-        
-        # Handle missing values in y_train for PLS
-        # Create a mask for samples with at least one non-missing target
-        y_mask = ~y_train.isna().all(axis=1)
-        
-        # Check if we have any samples with targets
-        if not y_mask.any():
-            print("WARNING: No samples with non-missing targets found for PLS fitting.")
-            print("Falling back to PCA for dimensionality reduction.")
-            # Fall back to PCA
-            pca = PCA(n_components=pls_n_components, random_state=42, whiten=True)
-            X_train_reduced = pca.fit_transform(X_train_scaled)
-            X_test_reduced = pca.transform(X_test_scaled)
-            print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
-        else:
-            # Filter data for PLS fitting
-            X_train_pls = X_train_scaled[y_mask]
-            y_train_pls = y_train[y_mask].fillna(y_train[y_mask].mean())
-            
-            # Fit PLS model
-            pls = PLSRegression(n_components=pls_n_components, scale=False)
-            pls.fit(X_train_pls, y_train_pls)
-            
-            # Transform both train and test data
-            X_train_reduced = pls.transform(X_train_scaled)
-            X_test_reduced = pls.transform(X_test_scaled)
-            
-            print(f"PLS fitted on {X_train_pls.shape[0]} samples with non-missing targets")
-        
+        X_train_reduced, X_test_reduced = apply_pls(
+            X_train_scaled, X_test_scaled, y_train, pls_n_components
+        )
         X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
         X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
     elif pca_variance_threshold is not None:
         print(f"Applying PCA with variance threshold {pca_variance_threshold}...")
-        global_pca = PCA(n_components=pca_variance_threshold, random_state=42, whiten=True)
-        X_train_reduced = global_pca.fit_transform(X_train_scaled)
-        X_test_reduced = global_pca.transform(X_test_scaled)
-        print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
-        print(f"Variance preserved: {global_pca.explained_variance_ratio_.sum():.4f}")
-        X_train_preprocessed = pd.DataFrame(X_train_reduced)
-        X_test_preprocessed = pd.DataFrame(X_test_reduced)
+        X_train_reduced, X_test_reduced = apply_pca(
+            X_train_scaled, X_test_scaled, pca_variance_threshold
+        )
+        X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
+        X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
     else:
         X_train_preprocessed = pd.DataFrame(X_train_scaled, index=X_train.index)
         X_test_preprocessed = pd.DataFrame(X_test_scaled, index=X_test.index)
-    
+
     print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
-    
-    # Add transformer features if enabled
+
     if use_transformer:
-        print(f"Adding transformer latent features (latent_dim={transformer_latent_dim})...")
-        try:
-            from transformer_model import TransformerModel
-            
-            # Ensure we have SMILES data
-            if smiles_train is None or smiles_test is None:
-                print("Error: SMILES data required for transformer. Skipping transformer features.")
-                return X_train_preprocessed, X_test_preprocessed
-            
-            # Initialize and train transformer (optimized for speed)
-            transformer = TransformerModel(
-                vocab_size=None,  # Will use default tokenizer vocab
-                target_dim=5,
-                latent_dim=transformer_latent_dim,  # Use provided latent dimension
-                num_heads=4,  # Reduced heads for speed
-                num_encoder_layers=2,  # Single layer for speed
-                num_decoder_layers=2,  # Single layer for speed
-                ff_dim=512,  # Reduced FF dimension
-                random_state=42,
-                max_length=100  # Reduced max length for memory efficiency
-            )
-            
-            # Fit transformer on training data using SMILES directly (optimized)
-            transformer.fit(smiles_train, y_train, epochs=3, batch_size=64, verbose=0)
-            
-            # Extract latent features
-            transformer_features_train = transformer.transform(smiles_train)
-            transformer_features_test = transformer.transform(smiles_test)
-            
-            # Add transformer features to the preprocessed data
-            transformer_cols = [f'transformer_{i}' for i in range(transformer_latent_dim)]
-            
-            X_train_with_transformer = pd.concat([
-                X_train_preprocessed,
-                pd.DataFrame(transformer_features_train, index=X_train_preprocessed.index, columns=transformer_cols)
-            ], axis=1)
-            
-            X_test_with_transformer = pd.concat([
-                X_test_preprocessed,
-                pd.DataFrame(transformer_features_test, index=X_test_preprocessed.index, columns=transformer_cols)
-            ], axis=1)
-            
-            print(f"Added {transformer_latent_dim} transformer features. New shape: {X_train_with_transformer.shape}")
-            
-            return X_train_with_transformer, X_test_with_transformer
-            
-        except ImportError:
-            print("Warning: transformer_model not found. Skipping transformer features.")
-        except Exception as e:
-            print(f"Warning: Error adding transformer features: {e}")
-    
+        X_train_preprocessed, X_test_preprocessed = add_transformer_features(
+            X_train_preprocessed,
+            X_test_preprocessed,
+            y_train,
+            smiles_train,
+            smiles_test,
+            transformer_latent_dim,
+            epochs=epochs,
+        )
+
     return X_train_preprocessed, X_test_preprocessed
 
 
-def load_competition_data(train_path, test_path, supp_paths=None, use_supplementary=True):
+def load_competition_data(train_path, test_path, supp_paths=None, use_supplementary=True, supplement_paths=None):
     """
     Load competition data including main training, test, and optional supplementary datasets
     
@@ -843,11 +859,14 @@ def load_competition_data(train_path, test_path, supp_paths=None, use_supplement
         test_path: Path to test data
         supp_paths: List of paths to supplementary datasets
         use_supplementary: Whether to include supplementary datasets
-    
+
     Returns:
-        Tuple of (train_df, test_df)
+        Tuple of (X_train_smiles, y_train, X_test_smiles)
     """
     print("Loading training data...")
+
+    if supplement_paths is not None:
+        supp_paths = supplement_paths
     
     # Load main training data
     train_df = pd.read_csv(train_path)
@@ -895,29 +914,81 @@ def load_competition_data(train_path, test_path, supp_paths=None, use_supplement
     # Add new_sim flag - True for test dataset (as it's from the competition)
     test_df['new_sim'] = True
     print(f"Test data shape: {test_df.shape}")
-    
+
     # Remove duplicates from training data
     print("\nRemoving duplicates from training data...")
     original_count = len(train_df)
-    
+
     # Count non-null target values for each row
     target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
     train_df['target_count'] = train_df[target_columns].notna().sum(axis=1)
-    
+
     # Sort by target_count (descending) and new_sim (True first) to prioritize rows with more data
     train_df = train_df.sort_values(['target_count', 'new_sim'], ascending=[False, False])
-    
+
     # Keep first occurrence of each SMILES (which has the most target values)
     train_df = train_df.drop_duplicates(subset=['SMILES'], keep='first')
-    
+
     # Remove the temporary target_count column
     train_df = train_df.drop('target_count', axis=1)
-    
+
     duplicate_count = original_count - len(train_df)
     print(f"Removed {duplicate_count} duplicate rows")
     print(f"Final training data shape: {train_df.shape}")
-    
-    return train_df, test_df
+
+    X_train_smiles = train_df['SMILES']
+    y_train = train_df[target_columns]
+    X_test_smiles = test_df['SMILES']
+
+    return X_train_smiles, y_train, X_test_smiles
+
+
+class DataProcessingPipeline:
+    """Class-based interface for data processing utilities"""
+
+    def calculate_main_branch_atoms(self, smiles):
+        return calculate_main_branch_atoms(smiles)
+
+    def calculate_backbone_bonds(self, smiles):
+        return calculate_backbone_bonds(smiles)
+
+    def calculate_average_bond_length(self, smiles):
+        return calculate_average_bond_length(smiles)
+
+    def extract_molecular_features(self, smiles, rpt):
+        return extract_molecular_features(smiles, rpt)
+
+    def prepare_features(self, df):
+        return prepare_features(df)
+
+    def apply_autoencoder(self, *args, **kwargs):
+        return apply_autoencoder(*args, **kwargs)
+
+    def apply_pca(self, X_train_scaled, X_test_scaled, variance_threshold):
+        return apply_pca(X_train_scaled, X_test_scaled, variance_threshold)
+
+    def apply_pls(self, X_train_scaled, X_test_scaled, y_train, n_components):
+        return apply_pls(X_train_scaled, X_test_scaled, y_train, n_components)
+
+    def add_transformer_features(self, X_train_preprocessed, X_test_preprocessed, y_train, smiles_train, smiles_test, transformer_latent_dim, epochs=3):
+        return add_transformer_features(
+            X_train_preprocessed,
+            X_test_preprocessed,
+            y_train,
+            smiles_train,
+            smiles_test,
+            transformer_latent_dim,
+            epochs,
+        )
+
+    def select_features_for_target(self, X, target):
+        return select_features_for_target(X, target)
+
+    def preprocess_data(self, *args, **kwargs):
+        return preprocess_data(*args, **kwargs)
+
+    def load_competition_data(self, *args, **kwargs):
+        return load_competition_data(*args, **kwargs)
 
 
 

@@ -4,10 +4,17 @@ import sys
 import os
 import numpy as np
 
+try:  # pragma: no cover - runtime availability
+    import deepchem  # noqa: F401
+    DEEPCHEM_AVAILABLE = True
+except Exception:  # pragma: no cover
+    DEEPCHEM_AVAILABLE = False
+
 # Add parent directory to path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
+@pytest.mark.skipif(not DEEPCHEM_AVAILABLE, reason="DeepChem not installed")
 def test_integration():
     """Test that DeepChem tokenizer integration works"""
     from transformer_model import SMILESTokenizer

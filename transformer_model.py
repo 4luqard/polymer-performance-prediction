@@ -4,6 +4,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import random
 import os
+# from deepchem.feat.smiles_tokenizer import SmilesTokenizer
 
 # Force CPU usage
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
