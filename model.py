@@ -185,7 +185,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
             multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5, 
                                                      target_columns=target_columns,
                                                      enable_diagnostics=False,
-                                                     model_type=model_type)
+                                                     model_type=model_type,
+                                                     smiles=train_df['SMILES'])
             
             return {
                 'multi_seed': multi_seed_result

@@ -25,7 +25,7 @@ from src.residual_analysis import ResidualAnalysisHook, should_run_analysis
 PCA_VARIANCE_THRESHOLD = None
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None):
     """
     Perform cross-validation for separate models approach
     
@@ -253,12 +253,42 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         # Run residual analysis if enabled
         if should_run_analysis():
             residual_hook = ResidualAnalysisHook()
+            
+            # Original residual analysis (for compatibility)
             residual_hook.analyze_predictions(
                 y_true=y_fold_val,
                 y_pred=fold_pred_df,
                 model_name=f'cv_{model_type}',
                 fold=fold
             )
+            
+            # Generate dataframes if SMILES are available
+            if smiles is not None:
+                # Get train and val SMILES
+                train_smiles = smiles.iloc[train_idx] if hasattr(smiles, 'iloc') else [smiles[i] for i in train_idx]
+                val_smiles = smiles.iloc[val_idx] if hasattr(smiles, 'iloc') else [smiles[i] for i in val_idx]
+                
+                # Get train predictions (using the trained models)
+                y_pred_train = pd.DataFrame(index=train_idx, columns=target_columns)
+                for i, target in enumerate(target_columns):
+                    # Use median as prediction for simplicity in train set
+                    y_pred_train[target] = y_fold_train[target].median()
+                
+                # Generate and save dataframes
+                residual_hook.generate_residuals_dataframe(
+                    X_train=X_fold_train.values if hasattr(X_fold_train, 'values') else X_fold_train,
+                    X_val=X_fold_val.values if hasattr(X_fold_val, 'values') else X_fold_val,
+                    y_train=y_fold_train,
+                    y_val=y_fold_val,
+                    y_pred_train=y_pred_train,
+                    y_pred_val=fold_pred_df,
+                    train_smiles=train_smiles.tolist() if hasattr(train_smiles, 'tolist') else train_smiles,
+                    val_smiles=val_smiles.tolist() if hasattr(val_smiles, 'tolist') else val_smiles,
+                    method=model_type,
+                    is_cv=True,
+                    fold=fold,
+                    seed=random_seed
+                )
         
         if not np.isnan(fold_score):
             fold_scores.append(fold_score)
@@ -303,7 +333,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     }
 
 
-def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm', preprocessed=True):
+def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm', preprocessed=True, smiles=None):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -340,7 +370,8 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
                                         enable_diagnostics=enable_diagnostics,
                                         random_seed=seed,
                                         model_type=model_type,
-                                        preprocessed=preprocessed)
+                                        preprocessed=preprocessed,
+                                        smiles=smiles)
         
         if result is not None:
             seed_results[seed] = result
