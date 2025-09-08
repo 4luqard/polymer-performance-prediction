@@ -286,13 +286,13 @@ class ResidualAnalysis:
                 continue
             
             # File path for this target
-            md_path = os.path.join(self.output_dir, f"residuals_cv_{model_name}_{target}.md")
+            md_path = os.path.join(self.output_dir, f"residuals_{target}.md")
             
             # Create markdown content
             content = []
             content.append("---")
-            content.append(f"Model: cv_{model_name}")
-            content.append(f"cv_seed: {cv_seed}")
+            content.append(f"Model: {model_name}")
+            content.append(f"Seed: {cv_seed}")
             content.append("")
             content.append("  Statistics:")
             
