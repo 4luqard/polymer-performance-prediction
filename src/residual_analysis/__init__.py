@@ -188,6 +188,10 @@ class ResidualAnalysis:
         """Convert numpy arrays and other non-serializable objects to JSON-serializable format"""
         if isinstance(obj, np.ndarray):
             return obj.tolist()
+        elif isinstance(obj, pd.Series):
+            return obj.tolist()
+        elif isinstance(obj, pd.DataFrame):
+            return obj.to_dict(orient='list')
         elif isinstance(obj, (np.float32, np.float64, np.int32, np.int64)):
             return float(obj) if 'float' in str(type(obj)) else int(obj)
         elif isinstance(obj, dict):

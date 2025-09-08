@@ -536,7 +536,7 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, supervised=True, random_state=42):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, supervised=True, random_state=42, all_analyzer_results=None):
     """
     Apply autoencoder for dimensionality reduction.
     
@@ -679,6 +679,8 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         analyzer_results = residual_hook.analyze_model_specific('autoencoder', outputs=outputs)
         if analyzer_results:
             print(f"  Autoencoder residual analysis completed")
+            if all_analyzer_results is not None:
+                all_analyzer_results['autoencoder'] = analyzer_results
     
     if X_test is None:
         return X_train_encoded
@@ -729,6 +731,9 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     """
     print("\n=== Preprocessing Data ===")
     
+    # Collection for all analyzer results from preprocessing methods
+    all_analyzer_results = {}
+    
     # Drop columns with all NaN values in training data
     nan_cols = X_train.columns[X_train.isna().all()]
     if len(nan_cols) > 0:
@@ -752,7 +757,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     global_pca = None
     if use_autoencoder:
         print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs)
+        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs, all_analyzer_results=all_analyzer_results)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     elif use_pls:
@@ -808,6 +813,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
                 analyzer_results = residual_hook.analyze_model_specific('pls', outputs=outputs)
                 if analyzer_results:
                     print(f"  PLS residual analysis completed")
+                    all_analyzer_results['pls'] = analyzer_results
         
         X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
         X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
@@ -837,6 +843,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
             analyzer_results = residual_hook.analyze_model_specific('pca', outputs=outputs)
             if analyzer_results:
                 print(f"  PCA residual analysis completed")
+                all_analyzer_results['pca'] = analyzer_results
         
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
@@ -855,6 +862,15 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
             # Ensure we have SMILES data
             if smiles_train is None or smiles_test is None:
                 print("Error: SMILES data required for transformer. Skipping transformer features.")
+                # Save all analyzer results if any were collected
+                if all_analyzer_results and should_run_analysis():
+                    try:
+                        from src.residual_analysis import ResidualAnalysis
+                        base_analyzer = ResidualAnalysis()
+                        base_analyzer.save_results(all_analyzer_results, "preprocessing_methods")
+                        print(f"  Saved preprocessing analyzer results for {list(all_analyzer_results.keys())} methods")
+                    except Exception as e:
+                        print(f"Warning: Could not save preprocessing analyzer results: {e}")
                 return X_train_preprocessed, X_test_preprocessed
             
             # Initialize and train transformer (optimized for speed)
@@ -862,16 +878,16 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
                 vocab_size=None,  # Will use default tokenizer vocab
                 target_dim=5,
                 latent_dim=transformer_latent_dim,  # Use provided latent dimension
-                num_heads=4,  # Reduced heads for speed
-                num_encoder_layers=2,  # Single layer for speed
-                num_decoder_layers=2,  # Single layer for speed
-                ff_dim=512,  # Reduced FF dimension
+                num_heads=1,  # Reduced heads for speed
+                num_encoder_layers=1,  # Single layer for speed
+                num_decoder_layers=1,  # Single layer for speed
+                ff_dim=32,  # Reduced FF dimension
                 random_state=42,
-                max_length=100  # Reduced max length for memory efficiency
+                max_length=200  # Reduced max length for memory efficiency
             )
             
             # Fit transformer on training data using SMILES directly (optimized)
-            transformer.fit(smiles_train, y_train, epochs=3, batch_size=64, verbose=0)
+            transformer.fit(smiles_train, y_train, epochs=3, batch_size=256, verbose=0)
             
             # Extract latent features
             transformer_features_train = transformer.transform(smiles_train)
@@ -892,12 +908,32 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
             
             print(f"Added {transformer_latent_dim} transformer features. New shape: {X_train_with_transformer.shape}")
             
+            # Save all analyzer results if any were collected
+            if all_analyzer_results and should_run_analysis():
+                try:
+                    from src.residual_analysis import ResidualAnalysis
+                    base_analyzer = ResidualAnalysis()
+                    base_analyzer.save_results(all_analyzer_results, "preprocessing_methods")
+                    print(f"  Saved preprocessing analyzer results for {list(all_analyzer_results.keys())} methods")
+                except Exception as e:
+                    print(f"Warning: Could not save preprocessing analyzer results: {e}")
+            
             return X_train_with_transformer, X_test_with_transformer
             
         except ImportError:
             print("Warning: transformer_model not found. Skipping transformer features.")
         except Exception as e:
             print(f"Warning: Error adding transformer features: {e}")
+    
+    # Save all analyzer results if any were collected
+    if all_analyzer_results and should_run_analysis():
+        try:
+            from src.residual_analysis import ResidualAnalysis
+            base_analyzer = ResidualAnalysis()
+            base_analyzer.save_results(all_analyzer_results, "preprocessing_methods")
+            print(f"  Saved preprocessing analyzer results for {list(all_analyzer_results.keys())} methods")
+        except Exception as e:
+            print(f"Warning: Could not save preprocessing analyzer results: {e}")
     
     return X_train_preprocessed, X_test_preprocessed
 
