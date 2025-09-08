@@ -5,6 +5,19 @@ from tensorflow.keras import layers
 import random
 import os
 
+# Import residual analysis if available
+try:
+    from src.residual_analysis import (
+        ResidualAnalysisHook,
+        TransformerResidualAnalyzer,
+        should_run_analysis
+    )
+except ImportError:
+    # If not available, create dummy functions
+    def should_run_analysis():
+        return False
+    ResidualAnalysisHook = None
+
 # Force CPU usage
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -351,7 +364,27 @@ class TransformerModel:
         # Tokenize SMILES strings
         X_tokens = self.tokenizer.tokenize(X_smiles)
         
-        return self.encoder_model.predict(X_tokens, verbose=0)
+        latent = self.encoder_model.predict(X_tokens, verbose=0)
+        
+        # Run residual analysis if enabled
+        if should_run_analysis() and ResidualAnalysisHook is not None:
+            residual_hook = ResidualAnalysisHook()
+            residual_hook.register_analyzer('transformer', TransformerResidualAnalyzer())
+            
+            # Get full model predictions for analysis
+            predictions = self.model.predict(X_tokens, verbose=0)
+            
+            # For transformer, we can analyze attention patterns if available
+            outputs = {
+                'predictions': predictions,
+                'hidden_states': latent.reshape(latent.shape[0], -1, self.latent_dim)
+            }
+            
+            analyzer_results = residual_hook.analyze_model_specific('transformer', outputs=outputs)
+            if analyzer_results:
+                print(f"  Transformer residual analysis completed")
+        
+        return latent
     
     def predict(self, X_smiles):
         """

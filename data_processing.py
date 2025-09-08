@@ -18,6 +18,22 @@ from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
 
+# Import residual analysis if available
+try:
+    from src.residual_analysis import (
+        ResidualAnalysisHook, 
+        TransformerResidualAnalyzer,
+        AutoencoderResidualAnalyzer,
+        PCAResidualAnalyzer,
+        PLSResidualAnalyzer,
+        should_run_analysis
+    )
+except ImportError:
+    # If not available, create dummy functions
+    def should_run_analysis():
+        return False
+    ResidualAnalysisHook = None
+
 import keras
 from keras.models import Sequential, Model
 from keras.layers import Dense, Input
@@ -646,6 +662,24 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     # Extract encoder and apply to data
     X_train_encoded = encoder_model.predict(X_train)
     
+    # Run residual analysis if enabled
+    if should_run_analysis() and ResidualAnalysisHook is not None:
+        residual_hook = ResidualAnalysisHook()
+        residual_hook.register_analyzer('autoencoder', AutoencoderResidualAnalyzer())
+        
+        # Get reconstructions for analysis
+        X_train_reconstructed = autoencoder.predict(X_train)
+        
+        outputs = {
+            'original': X_train,
+            'reconstructed': X_train_reconstructed,
+            'latent': X_train_encoded
+        }
+        
+        analyzer_results = residual_hook.analyze_model_specific('autoencoder', outputs=outputs)
+        if analyzer_results:
+            print(f"  Autoencoder residual analysis completed")
+    
     if X_test is None:
         return X_train_encoded
     else:
@@ -760,6 +794,20 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
             X_test_reduced = pls.transform(X_test_scaled)
             
             print(f"PLS fitted on {X_train_pls.shape[0]} samples with non-missing targets")
+            
+            # Run residual analysis if enabled
+            if should_run_analysis() and ResidualAnalysisHook is not None:
+                residual_hook = ResidualAnalysisHook()
+                residual_hook.register_analyzer('pls', PLSResidualAnalyzer())
+                
+                outputs = {
+                    'components': pls.x_loadings_,
+                    'scores': X_train_reduced
+                }
+                
+                analyzer_results = residual_hook.analyze_model_specific('pls', outputs=outputs)
+                if analyzer_results:
+                    print(f"  PLS residual analysis completed")
         
         X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
         X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
@@ -770,6 +818,26 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_test_reduced = global_pca.transform(X_test_scaled)
         print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
         print(f"Variance preserved: {global_pca.explained_variance_ratio_.sum():.4f}")
+        
+        # Run residual analysis if enabled
+        if should_run_analysis() and ResidualAnalysisHook is not None:
+            residual_hook = ResidualAnalysisHook()
+            residual_hook.register_analyzer('pca', PCAResidualAnalyzer())
+            
+            # Get reconstruction for analysis
+            X_train_reconstructed = global_pca.inverse_transform(X_train_reduced)
+            
+            outputs = {
+                'original': X_train_scaled,
+                'transformed': X_train_reduced,
+                'reconstructed': X_train_reconstructed,
+                'explained_variance': global_pca.explained_variance_ratio_
+            }
+            
+            analyzer_results = residual_hook.analyze_model_specific('pca', outputs=outputs)
+            if analyzer_results:
+                print(f"  PCA residual analysis completed")
+        
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     else:
