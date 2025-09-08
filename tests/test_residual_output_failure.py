@@ -118,8 +118,8 @@ class TestResidualOutputFailure:
             # Check content format
             content = md_file.read_text()
             assert "---" in content
-            assert "Model: cv_lightgbm" in content
-            assert "cv_seed: 0" in content
+            assert "Model: lightgbm" in content
+            assert "Seed: 0" in content
             assert "Statistics:" in content
             assert "Visualization:" in content
     
@@ -133,7 +133,7 @@ class TestResidualOutputFailure:
             model_name='lightgbm'
         )
         
-        expected_file = temp_dir / "residuals_cv_lightgbm_Tg.md"
+        expected_file = temp_dir / "residuals_Tg.md"
         assert expected_file.exists()
         
         # Test for Ridge
@@ -142,7 +142,7 @@ class TestResidualOutputFailure:
             model_name='ridge'
         )
         
-        expected_file = temp_dir / "residuals_cv_ridge_FFV.md"
+        expected_file = temp_dir / "residuals_FFV.md"
         assert expected_file.exists()
     
     def test_fold_appending(self, temp_dir, test_data):
@@ -165,7 +165,7 @@ class TestResidualOutputFailure:
             md_file = temp_dir / f"residuals_cv_lightgbm_{target}.md"
             content = md_file.read_text()
             # Should have 3 sections (one per fold)
-            assert content.count("cv_seed: 0") == 3
+            assert content.count("Seed: 0") == 3
     
     def test_transformer_results_saved(self, temp_dir):
         """Test that transformer residual analysis results are saved"""
@@ -280,7 +280,7 @@ class TestResidualOutputFailure:
         )
         
         # Check that statistics are in the file
-        md_file = temp_dir / "residuals_cv_lightgbm_Tg.md"
+        md_file = temp_dir / "residuals_Tg.md"
         content = md_file.read_text()
         
         assert "mean: 0.05" in content or "mean: 0.050000" in content
