@@ -105,7 +105,7 @@ class TestResidualAnalysis:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             ra.output_dir = tmpdir
-            ra.save_results(residuals, "test_model")
+            ra.save_results(residuals, "test_model", save_pkl=True)
             
             # Check that results were saved
             results_path = os.path.join(tmpdir, "residual_analysis_test_model.pkl")
@@ -126,8 +126,8 @@ class TestResidualAnalysis:
                 'feature_importance': np.array([0.1, 0.2, 0.3, 0.4])
             }
             
-            # Save results
-            ra.save_results(results, "test_model")
+            # Save results with append_mode=False to get complete files
+            ra.save_results(results, "test_model", append_mode=False)
             
             # Check that human-readable files were saved
             json_path = os.path.join(tmpdir, "residual_analysis_test_model.json")
@@ -163,9 +163,19 @@ class TestResidualAnalyzer:
         # Mock LightGBM model predictions
         mock_model = Mock()
         mock_model.predict.return_value = np.random.randn(100, 5)
+        mock_model.feature_importance.return_value = np.random.rand(50)
         
-        # Test analysis
-        results = analyzer.analyze(mock_model, X=None, y=None)
+        # Test analysis with predictions and actuals
+        predictions = np.random.randn(100, 5)
+        actuals = pd.DataFrame({
+            'Tg': np.random.randn(100),
+            'FFV': np.random.randn(100),
+            'Tc': np.random.randn(100),
+            'Density': np.random.randn(100),
+            'Rg': np.random.randn(100)
+        })
+        
+        results = analyzer.analyze(predictions=predictions, actuals=actuals, model=mock_model)
         assert 'residuals' in results
         assert 'feature_importance' in results
     
