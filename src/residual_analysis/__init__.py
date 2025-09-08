@@ -40,9 +40,11 @@ def update_gitignore(gitignore_path: str = ".gitignore") -> None:
 class ResidualAnalysis:
     """Base class for residual analysis of model predictions"""
     
-    def __init__(self, output_dir: str = "residual_analysis"):
+    def __init__(self, output_dir: str = "residual_analysis", save_txt: bool = False, save_png: bool = False):
         self.output_dir = output_dir
         self.targets = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+        self.save_txt = save_txt
+        self.save_png = save_png
         self._ensure_output_dir()
         
     def _ensure_output_dir(self):
@@ -65,7 +67,7 @@ class ResidualAnalysis:
     def visualize_residuals(self, residuals: Dict[str, np.ndarray], 
                           fold: Optional[int] = None) -> None:
         """Create residual plots for each target"""
-        if not should_run_analysis():
+        if not should_run_analysis() or not self.save_png:
             return
             
         plot_dir = os.path.join(self.output_dir, "plots") if self.output_dir != "residual_analysis" else self.output_dir
@@ -215,15 +217,16 @@ class ResidualAnalysis:
                             with open(json_path, 'w') as f:
                                 json.dump([json_target_results], f, indent=2)
                     
-                    # Save text (append mode)
-                    txt_path = os.path.join(self.output_dir, f"residual_analysis_{target}.txt")
-                    with open(txt_path, 'a' if append_mode else 'w') as f:
-                        f.write(f"\n{'='*60}\n")
-                        f.write(f"Model: {model_name}\n")
-                        f.write(f"Target: {target}\n")
-                        f.write(f"Timestamp: {pd.Timestamp.now().isoformat()}\n")
-                        f.write(self._format_target_results_as_text(target_results))
-                        f.write(f"\n")
+                    # Save text (append mode) only if save_txt is True
+                    if self.save_txt:
+                        txt_path = os.path.join(self.output_dir, f"residual_analysis_{target}.txt")
+                        with open(txt_path, 'a' if append_mode else 'w') as f:
+                            f.write(f"\n{'='*60}\n")
+                            f.write(f"Model: {model_name}\n")
+                            f.write(f"Target: {target}\n")
+                            f.write(f"Timestamp: {pd.Timestamp.now().isoformat()}\n")
+                            f.write(self._format_target_results_as_text(target_results))
+                            f.write(f"\n")
                     
                     # Save pkl if requested
                     if save_pkl:
@@ -265,10 +268,11 @@ class ResidualAnalysis:
                 with open(json_path, 'w') as f:
                     json.dump(json_results, f, indent=2)
             
-            # Save as human-readable text
-            txt_path = os.path.join(self.output_dir, f"{base_name}.txt")
-            with open(txt_path, 'w') as f:
-                f.write(self._format_results_as_text(results, model_name))
+            # Save as human-readable text only if save_txt is True
+            if self.save_txt:
+                txt_path = os.path.join(self.output_dir, f"{base_name}.txt")
+                with open(txt_path, 'w') as f:
+                    f.write(self._format_results_as_text(results, model_name))
     
     def save_cv_fold_results(self, fold_data: Dict[str, Any], model_name: str, 
                            fold_idx: int, cv_seed: int) -> None:
@@ -517,9 +521,13 @@ class ResidualAnalysis:
 class ResidualAnalyzer:
     """Base class for model/method-specific analyzers"""
     
-    def __init__(self, model_type: str = None, output_dir: str = "residual_analysis"):
+    def __init__(self, model_type: str = None, output_dir: str = "residual_analysis", 
+                 save_txt: bool = False, save_png: bool = False):
         self.model_type = model_type
         self.residual_analysis = ResidualAnalysis(output_dir=output_dir)
+        self.output_dir = output_dir
+        self.save_txt = save_txt
+        self.save_png = save_png
     
     def analyze(self, *args, **kwargs):
         """Analyze residuals for specific model/method"""
@@ -528,6 +536,112 @@ class ResidualAnalyzer:
     def save_results(self, results: Any, filename_prefix: str, save_pkl: bool = False, save_json: bool = False) -> None:
         """Save results using the residual analysis save method"""
         self.residual_analysis.save_results(results, filename_prefix, save_pkl=save_pkl, save_json=save_json, append_mode=True)
+    
+    def get_residuals_dataframe(self, X: np.ndarray, y_true: Dict[str, np.ndarray], 
+                               y_pred: Dict[str, np.ndarray], smiles: List[str],
+                               target: str, method: str = None, is_cv: bool = False, 
+                               fold: int = None, seed: int = None) -> pd.DataFrame:
+        """Create dataframe with residuals, features, and metadata"""
+        # Calculate residuals for the target
+        if target in y_true and target in y_pred:
+            mask = ~np.isnan(y_true[target])
+            residuals = y_pred[target][mask] - y_true[target][mask]
+            
+            # Create dataframe with features
+            feature_cols = [f'feature_{i}' for i in range(X.shape[1])]
+            df = pd.DataFrame(X[mask], columns=feature_cols)
+            
+            # Add SMILES, target, and residuals
+            df['SMILES'] = [smiles[i] for i in range(len(mask)) if mask[i]]
+            df[target] = y_true[target][mask]
+            df['residuals'] = residuals
+            
+            # Add metadata columns
+            if method is not None:
+                df['method'] = method
+            df['cv'] = is_cv
+            if fold is not None:
+                df['fold'] = fold
+            if seed is not None:
+                df['seed'] = seed
+                
+            return df
+        else:
+            return pd.DataFrame()
+    
+    def get_combined_residuals_dataframe(self, X_train: np.ndarray, X_val: np.ndarray,
+                                        y_train: Dict[str, np.ndarray], y_val: Dict[str, np.ndarray],
+                                        y_pred_train: Dict[str, np.ndarray], y_pred_val: Dict[str, np.ndarray],
+                                        train_smiles: List[str], val_smiles: List[str],
+                                        target: str, **kwargs) -> pd.DataFrame:
+        """Combine train and validation residuals with train_val indicator"""
+        # Get train dataframe
+        df_train = self.get_residuals_dataframe(
+            X_train, y_train, y_pred_train, train_smiles, target, **kwargs
+        )
+        if not df_train.empty:
+            df_train['train_val'] = False
+        
+        # Get validation dataframe
+        df_val = self.get_residuals_dataframe(
+            X_val, y_val, y_pred_val, val_smiles, target, **kwargs
+        )
+        if not df_val.empty:
+            df_val['train_val'] = True
+        
+        # Combine dataframes
+        if not df_train.empty and not df_val.empty:
+            return pd.concat([df_train, df_val], ignore_index=True)
+        elif not df_train.empty:
+            return df_train
+        elif not df_val.empty:
+            return df_val
+        else:
+            return pd.DataFrame()
+    
+    def get_preprocessing_residuals_dataframe(self, original_features: np.ndarray,
+                                             transformed_features: np.ndarray,
+                                             smiles: List[str], targets: Dict[str, np.ndarray],
+                                             residuals: np.ndarray, method: str) -> pd.DataFrame:
+        """Create dataframe for preprocessing methods with original and transformed features"""
+        # Create dataframe with original features
+        orig_cols = [f'orig_feature_{i}' for i in range(original_features.shape[1])]
+        df = pd.DataFrame(original_features, columns=orig_cols)
+        
+        # Add transformed features
+        trans_cols = [f'trans_feature_{i}' for i in range(transformed_features.shape[1])]
+        df_trans = pd.DataFrame(transformed_features, columns=trans_cols)
+        df = pd.concat([df, df_trans], axis=1)
+        
+        # Add SMILES and targets
+        df['SMILES'] = smiles
+        for target_name, target_values in targets.items():
+            df[target_name] = target_values
+        
+        # Add residuals and metadata
+        df['residuals'] = residuals
+        df['method'] = method
+        
+        return df
+    
+    def save_residuals_dataframe(self, df: pd.DataFrame, method: str, target: str, 
+                                fold: int = None) -> str:
+        """Save residuals dataframe as parquet file"""
+        if not should_run_analysis():
+            return ""
+        
+        # Create filename
+        if fold is not None:
+            filename = f"residuals_{method}_{target}_fold_{fold}.parquet"
+        else:
+            filename = f"residuals_{method}_{target}.parquet"
+        
+        filepath = os.path.join(self.output_dir, filename)
+        
+        # Save as parquet
+        df.to_parquet(filepath, engine='pyarrow', compression='snappy')
+        
+        return filepath
 
 
 class LightGBMResidualAnalyzer(ResidualAnalyzer):

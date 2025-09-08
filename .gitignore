@@ -218,7 +218,7 @@ submission_kernel/
 # Datasets
 data/
 
-residual_analysis/
+/residual_analysis/
 *.pkl
 residual_plots/
 residual_results/
