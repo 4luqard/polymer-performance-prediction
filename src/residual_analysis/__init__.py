@@ -159,13 +159,14 @@ class ResidualAnalysis:
         
         return results
     
-    def save_results(self, results: Any, model_name: str, save_pkl: bool = False, append_mode: bool = True) -> None:
+    def save_results(self, results: Any, model_name: str, save_pkl: bool = False, save_json: bool = False, append_mode: bool = True) -> None:
         """Save residual analysis results in multiple formats
         
         Args:
             results: Results to save
             model_name: Model name for file naming
             save_pkl: Whether to save pickle files (default: False)
+            save_json: Whether to save JSON files (default: False)
             append_mode: Whether to append to existing files for per-target results (default: True)
         """
         if not should_run_analysis():
@@ -190,27 +191,29 @@ class ResidualAnalysis:
                         'timestamp': pd.Timestamp.now().isoformat()
                     }
                     
-                    # Convert to JSON serializable
-                    json_target_results = self._convert_to_json_serializable(target_results)
-                    
-                    # Save JSON (append mode)
-                    json_path = os.path.join(self.output_dir, f"residual_analysis_{target}.json")
-                    if append_mode and os.path.exists(json_path):
-                        # Load existing data
-                        with open(json_path, 'r') as f:
-                            existing_data = json.load(f)
-                        # Ensure it's a list
-                        if not isinstance(existing_data, list):
-                            existing_data = [existing_data]
-                        # Append new data
-                        existing_data.append(json_target_results)
-                        # Save updated data
-                        with open(json_path, 'w') as f:
-                            json.dump(existing_data, f, indent=2)
-                    else:
-                        # Create new file with list
-                        with open(json_path, 'w') as f:
-                            json.dump([json_target_results], f, indent=2)
+                    # Save JSON only if requested
+                    if save_json:
+                        # Convert to JSON serializable
+                        json_target_results = self._convert_to_json_serializable(target_results)
+                        
+                        # Save JSON (append mode)
+                        json_path = os.path.join(self.output_dir, f"residual_analysis_{target}.json")
+                        if append_mode and os.path.exists(json_path):
+                            # Load existing data
+                            with open(json_path, 'r') as f:
+                                existing_data = json.load(f)
+                            # Ensure it's a list
+                            if not isinstance(existing_data, list):
+                                existing_data = [existing_data]
+                            # Append new data
+                            existing_data.append(json_target_results)
+                            # Save updated data
+                            with open(json_path, 'w') as f:
+                                json.dump(existing_data, f, indent=2)
+                        else:
+                            # Create new file with list
+                            with open(json_path, 'w') as f:
+                                json.dump([json_target_results], f, indent=2)
                     
                     # Save text (append mode)
                     txt_path = os.path.join(self.output_dir, f"residual_analysis_{target}.txt")
@@ -252,19 +255,145 @@ class ResidualAnalysis:
                 with open(pkl_path, 'wb') as f:
                     pickle.dump(results, f)
             
-            # Convert numpy arrays to lists for JSON serialization
-            json_results = self._convert_to_json_serializable(results)
-            
-            # Save as JSON
-            json_path = os.path.join(self.output_dir, f"{base_name}.json")
-            with open(json_path, 'w') as f:
-                json.dump(json_results, f, indent=2)
+            # Save as JSON only if requested
+            if save_json:
+                # Convert numpy arrays to lists for JSON serialization
+                json_results = self._convert_to_json_serializable(results)
+                
+                # Save as JSON
+                json_path = os.path.join(self.output_dir, f"{base_name}.json")
+                with open(json_path, 'w') as f:
+                    json.dump(json_results, f, indent=2)
             
             # Save as human-readable text
             txt_path = os.path.join(self.output_dir, f"{base_name}.txt")
             with open(txt_path, 'w') as f:
                 f.write(self._format_results_as_text(results, model_name))
     
+    def save_cv_fold_results(self, fold_data: Dict[str, Any], model_name: str, 
+                           fold_idx: int, cv_seed: int) -> None:
+        """Save CV fold results in markdown format with combined stats and visualizations"""
+        if not should_run_analysis():
+            return
+        
+        # Extract data
+        residuals = fold_data.get('residuals', {})
+        statistics = fold_data.get('statistics', {})
+        
+        # Save results for each target
+        for target in self.targets:
+            if target not in residuals:
+                continue
+            
+            # File path for this target
+            md_path = os.path.join(self.output_dir, f"residuals_cv_{model_name}_{target}.md")
+            
+            # Create markdown content
+            content = []
+            content.append("---")
+            content.append(f"Model: cv_{model_name}")
+            content.append(f"cv_seed: {cv_seed}")
+            content.append("")
+            content.append("  Statistics:")
+            
+            # Add statistics if available
+            if target in statistics:
+                stats = statistics[target]
+                for stat_name, stat_val in stats.items():
+                    if isinstance(stat_val, (int, float, np.number)):
+                        content.append(f"    {stat_name}: {stat_val:.6f}")
+                    else:
+                        content.append(f"    {stat_name}: {stat_val}")
+            
+            content.append("")
+            content.append("  Visualization:")
+            
+            # Generate visualization
+            if len(residuals[target]) > 0:
+                # Create residual plots
+                fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+                res = residuals[target]
+                
+                # Histogram
+                ax = axes[0, 0]
+                ax.hist(res, bins=30, alpha=0.7, edgecolor='black')
+                ax.set_xlabel('Residuals')
+                ax.set_ylabel('Frequency')
+                ax.set_title('Residual Distribution')
+                
+                # Q-Q plot
+                ax = axes[0, 1]
+                from scipy import stats as scipy_stats
+                scipy_stats.probplot(res, dist="norm", plot=ax)
+                ax.set_title('Q-Q Plot')
+                
+                # Residuals vs Index
+                ax = axes[1, 0]
+                ax.scatter(range(len(res)), res, alpha=0.5)
+                ax.axhline(y=0, color='r', linestyle='--')
+                ax.set_xlabel('Sample Index')
+                ax.set_ylabel('Residuals')
+                ax.set_title('Residuals vs Sample Index')
+                
+                # Box plot
+                ax = axes[1, 1]
+                ax.boxplot(res)
+                ax.set_ylabel('Residuals')
+                ax.set_title('Residual Box Plot')
+                
+                plt.tight_layout()
+                
+                # Save to base64 for embedding
+                import io
+                import base64
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+                buf.seek(0)
+                image_base64 = base64.b64encode(buf.read()).decode()
+                plt.close(fig)
+                
+                # Add image to markdown
+                content.append(f"  ![Residual Analysis](data:image/png;base64,{image_base64})")
+            
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # Append to file
+            with open(md_path, 'a') as f:
+                f.write('\n'.join(content))
+    
+    def save_cv_results(self, results: Dict[str, Any], model_name: str) -> None:
+        """Save CV results in markdown format"""
+        if not should_run_analysis():
+            return
+        
+        for target, target_data in results.items():
+            if 'statistics' not in target_data:
+                continue
+            
+            # Create simple markdown file with statistics
+            md_path = os.path.join(self.output_dir, f"residuals_cv_{model_name}_{target}.md")
+            
+            content = []
+            content.append("---")
+            content.append(f"Model: cv_{model_name}")
+            content.append("")
+            content.append("  Statistics:")
+            
+            stats = target_data['statistics']
+            for stat_name, stat_val in stats.items():
+                if isinstance(stat_val, (int, float, np.number)):
+                    content.append(f"    {stat_name}: {stat_val:.6f}")
+                else:
+                    content.append(f"    {stat_name}: {stat_val}")
+            
+            content.append("")
+            content.append("---")
+            
+            with open(md_path, 'w') as f:
+                f.write('\n'.join(content))
+
     def _convert_to_json_serializable(self, obj: Any) -> Any:
         """Convert numpy arrays and other non-serializable objects to JSON-serializable format"""
         if isinstance(obj, np.ndarray):
@@ -396,9 +525,9 @@ class ResidualAnalyzer:
         """Analyze residuals for specific model/method"""
         raise NotImplementedError
     
-    def save_results(self, results: Any, filename_prefix: str, save_pkl: bool = False) -> None:
+    def save_results(self, results: Any, filename_prefix: str, save_pkl: bool = False, save_json: bool = False) -> None:
         """Save results using the residual analysis save method"""
-        self.residual_analysis.save_results(results, filename_prefix, save_pkl=save_pkl, append_mode=True)
+        self.residual_analysis.save_results(results, filename_prefix, save_pkl=save_pkl, save_json=save_json, append_mode=True)
 
 
 class LightGBMResidualAnalyzer(ResidualAnalyzer):

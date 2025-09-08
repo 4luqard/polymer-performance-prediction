@@ -349,7 +349,7 @@ class TransformerModel:
         
         return history
     
-    def transform(self, X_smiles):
+    def transform(self, X_smiles, return_analyzer_results=False):
         """
         Extract latent features from SMILES strings.
         
@@ -383,7 +383,11 @@ class TransformerModel:
             
             analyzer_results = residual_hook.analyze_model_specific('transformer', outputs=outputs)
             if analyzer_results:
+                residual_hook.save(analyzer_results, 'transformer_residual_analysis')
                 print(f"  Transformer residual analysis completed")
+                
+                if return_analyzer_results:
+                    return latent, analyzer_results
         
         return latent
     
