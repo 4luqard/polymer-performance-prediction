@@ -4,6 +4,7 @@ import pandas as pd
 from unittest.mock import Mock, patch
 import os
 import tempfile
+import json
 
 # Test the residual analysis class that doesn't exist yet
 from src.residual_analysis import ResidualAnalysis, ResidualAnalyzer
@@ -109,6 +110,45 @@ class TestResidualAnalysis:
             # Check that results were saved
             results_path = os.path.join(tmpdir, "residual_analysis_test_model.pkl")
             assert os.path.exists(results_path)
+    
+    def test_save_human_readable_results(self):
+        """Test saving results in human-readable formats"""
+        ra = ResidualAnalysis()
+        residuals = ra.calculate_residuals(self.y_true, self.y_pred)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ra.output_dir = tmpdir
+            
+            # Create mock results with numpy arrays
+            results = {
+                'residuals': residuals,
+                'patterns': ra.analyze_patterns(residuals),
+                'feature_importance': np.array([0.1, 0.2, 0.3, 0.4])
+            }
+            
+            # Save results
+            ra.save_results(results, "test_model")
+            
+            # Check that human-readable files were saved
+            json_path = os.path.join(tmpdir, "residual_analysis_test_model.json")
+            txt_path = os.path.join(tmpdir, "residual_analysis_test_model.txt")
+            
+            assert os.path.exists(json_path), "JSON file should be created"
+            assert os.path.exists(txt_path), "Text file should be created"
+            
+            # Verify JSON content is readable
+            with open(json_path, 'r') as f:
+                json_data = json.load(f)
+                assert 'residuals' in json_data
+                assert 'patterns' in json_data
+                assert 'feature_importance' in json_data
+            
+            # Verify text content is human-readable
+            with open(txt_path, 'r') as f:
+                txt_content = f.read()
+                assert 'Residual Analysis Results' in txt_content
+                assert 'PATTERNS' in txt_content
+                assert 'mean:' in txt_content
 
 
 class TestResidualAnalyzer:
