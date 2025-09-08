@@ -159,30 +159,111 @@ class ResidualAnalysis:
         
         return results
     
-    def save_results(self, results: Any, model_name: str) -> None:
-        """Save residual analysis results in multiple formats"""
+    def save_results(self, results: Any, model_name: str, save_pkl: bool = False, append_mode: bool = True) -> None:
+        """Save residual analysis results in multiple formats
+        
+        Args:
+            results: Results to save
+            model_name: Model name for file naming
+            save_pkl: Whether to save pickle files (default: False)
+            append_mode: Whether to append to existing files for per-target results (default: True)
+        """
         if not should_run_analysis():
             return
         
-        base_name = f"residual_analysis_{model_name}"
-        
-        # Save as pickle (for backward compatibility)
-        pkl_path = os.path.join(self.output_dir, f"{base_name}.pkl")
-        with open(pkl_path, 'wb') as f:
-            pickle.dump(results, f)
-        
-        # Convert numpy arrays to lists for JSON serialization
-        json_results = self._convert_to_json_serializable(results)
-        
-        # Save as JSON
-        json_path = os.path.join(self.output_dir, f"{base_name}.json")
-        with open(json_path, 'w') as f:
-            json.dump(json_results, f, indent=2)
-        
-        # Save as human-readable text
-        txt_path = os.path.join(self.output_dir, f"{base_name}.txt")
-        with open(txt_path, 'w') as f:
-            f.write(self._format_results_as_text(results, model_name))
+        # Check if results contain per-target residual data
+        # Only use per-target saving when:
+        # 1. append_mode is True AND
+        # 2. results has 'residuals' key (new format from analyzers)
+        if append_mode and isinstance(results, dict) and 'residuals' in results and isinstance(results['residuals'], dict):
+            # Save per-target results (append mode)
+            # Get residuals from either format
+            residuals_data = results['residuals'] if 'residuals' in results else results
+            
+            for target in self.targets:
+                if target in residuals_data:
+                    target_results = {
+                        'model_name': model_name,
+                        'target': target,
+                        'residuals': residuals_data[target],
+                        'statistics': results.get('statistics', {}).get(target, {}) if 'statistics' in results else {},
+                        'timestamp': pd.Timestamp.now().isoformat()
+                    }
+                    
+                    # Convert to JSON serializable
+                    json_target_results = self._convert_to_json_serializable(target_results)
+                    
+                    # Save JSON (append mode)
+                    json_path = os.path.join(self.output_dir, f"residual_analysis_{target}.json")
+                    if append_mode and os.path.exists(json_path):
+                        # Load existing data
+                        with open(json_path, 'r') as f:
+                            existing_data = json.load(f)
+                        # Ensure it's a list
+                        if not isinstance(existing_data, list):
+                            existing_data = [existing_data]
+                        # Append new data
+                        existing_data.append(json_target_results)
+                        # Save updated data
+                        with open(json_path, 'w') as f:
+                            json.dump(existing_data, f, indent=2)
+                    else:
+                        # Create new file with list
+                        with open(json_path, 'w') as f:
+                            json.dump([json_target_results], f, indent=2)
+                    
+                    # Save text (append mode)
+                    txt_path = os.path.join(self.output_dir, f"residual_analysis_{target}.txt")
+                    with open(txt_path, 'a' if append_mode else 'w') as f:
+                        f.write(f"\n{'='*60}\n")
+                        f.write(f"Model: {model_name}\n")
+                        f.write(f"Target: {target}\n")
+                        f.write(f"Timestamp: {pd.Timestamp.now().isoformat()}\n")
+                        f.write(self._format_target_results_as_text(target_results))
+                        f.write(f"\n")
+                    
+                    # Save pkl if requested
+                    if save_pkl:
+                        pkl_path = os.path.join(self.output_dir, f"residual_analysis_{target}.pkl")
+                        if append_mode and os.path.exists(pkl_path):
+                            # Load existing data
+                            with open(pkl_path, 'rb') as f:
+                                existing_data = pickle.load(f)
+                            # Ensure it's a list
+                            if not isinstance(existing_data, list):
+                                existing_data = [existing_data]
+                            # Append new data
+                            existing_data.append(target_results)
+                            # Save updated data
+                            with open(pkl_path, 'wb') as f:
+                                pickle.dump(existing_data, f)
+                        else:
+                            # Create new file with list
+                            with open(pkl_path, 'wb') as f:
+                                pickle.dump([target_results], f)
+        else:
+            # Save complete results (original behavior for non-per-target results)
+            base_name = f"residual_analysis_{model_name}"
+            
+            # For backward compatibility, save pkl for complete results when not specified
+            if save_pkl or (save_pkl is None and not append_mode):
+                # Save as pickle (only if requested)
+                pkl_path = os.path.join(self.output_dir, f"{base_name}.pkl")
+                with open(pkl_path, 'wb') as f:
+                    pickle.dump(results, f)
+            
+            # Convert numpy arrays to lists for JSON serialization
+            json_results = self._convert_to_json_serializable(results)
+            
+            # Save as JSON
+            json_path = os.path.join(self.output_dir, f"{base_name}.json")
+            with open(json_path, 'w') as f:
+                json.dump(json_results, f, indent=2)
+            
+            # Save as human-readable text
+            txt_path = os.path.join(self.output_dir, f"{base_name}.txt")
+            with open(txt_path, 'w') as f:
+                f.write(self._format_results_as_text(results, model_name))
     
     def _convert_to_json_serializable(self, obj: Any) -> Any:
         """Convert numpy arrays and other non-serializable objects to JSON-serializable format"""
@@ -261,6 +342,30 @@ class ResidualAnalysis:
         
         return "\n".join(lines)
     
+    def _format_target_results_as_text(self, target_results: Dict[str, Any]) -> str:
+        """Format per-target results as human-readable text"""
+        lines = []
+        
+        if 'residuals' in target_results:
+            residuals = target_results['residuals']
+            if isinstance(residuals, (list, np.ndarray)):
+                residuals = np.array(residuals)
+                lines.append(f"  Number of samples: {len(residuals)}")
+                lines.append(f"  Mean residual: {np.mean(residuals):.6f}")
+                lines.append(f"  Std residual: {np.std(residuals):.6f}")
+                lines.append(f"  Min residual: {np.min(residuals):.6f}")
+                lines.append(f"  Max residual: {np.max(residuals):.6f}")
+        
+        if 'statistics' in target_results and isinstance(target_results['statistics'], dict):
+            lines.append(f"\n  Statistics:")
+            for metric, value in target_results['statistics'].items():
+                if isinstance(value, (int, float, np.number)):
+                    lines.append(f"    {metric}: {value:.6f}")
+                else:
+                    lines.append(f"    {metric}: {value}")
+        
+        return "\n".join(lines)
+    
     def _format_dict_as_text(self, d: dict, indent: int = 0) -> List[str]:
         """Format nested dictionary as indented text"""
         lines = []
@@ -283,22 +388,32 @@ class ResidualAnalysis:
 class ResidualAnalyzer:
     """Base class for model/method-specific analyzers"""
     
-    def __init__(self):
-        self.residual_analysis = ResidualAnalysis()
+    def __init__(self, model_type: str = None, output_dir: str = "residual_analysis"):
+        self.model_type = model_type
+        self.residual_analysis = ResidualAnalysis(output_dir=output_dir)
     
     def analyze(self, *args, **kwargs):
         """Analyze residuals for specific model/method"""
         raise NotImplementedError
+    
+    def save_results(self, results: Any, filename_prefix: str, save_pkl: bool = False) -> None:
+        """Save results using the residual analysis save method"""
+        self.residual_analysis.save_results(results, filename_prefix, save_pkl=save_pkl, append_mode=True)
 
 
 class LightGBMResidualAnalyzer(ResidualAnalyzer):
     """Residual analyzer for LightGBM models"""
     
-    def analyze(self, model, X: Optional[Any] = None, y: Optional[Any] = None, 
-                predictions: Optional[np.ndarray] = None) -> Dict[str, Any]:
+    def analyze(self, predictions: Optional[Any] = None, actuals: Optional[Any] = None, 
+                model: Optional[Any] = None, X: Optional[Any] = None, y: Optional[Any] = None, 
+                model_name: str = None) -> Dict[str, Any]:
         """Analyze LightGBM model residuals and feature importance"""
         results = {}
         
+        # Use actuals parameter if provided, otherwise fallback to y
+        if actuals is not None:
+            y = actuals
+            
         if predictions is not None and y is not None:
             # Convert predictions and y to dict format if needed
             if isinstance(predictions, np.ndarray) and predictions.ndim == 2:
