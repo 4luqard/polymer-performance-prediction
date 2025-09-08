@@ -890,8 +890,19 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
             transformer.fit(smiles_train, y_train, epochs=3, batch_size=256, verbose=0)
             
             # Extract latent features
-            transformer_features_train = transformer.transform(smiles_train)
-            transformer_features_test = transformer.transform(smiles_test)
+            if should_run_analysis() and hasattr(transformer, 'transform'):
+                # Get transformer features and analyzer results
+                result = transformer.transform(smiles_train, return_analyzer_results=True)
+                if isinstance(result, tuple):
+                    transformer_features_train, analyzer_results = result
+                    if analyzer_results and all_analyzer_results is not None:
+                        all_analyzer_results['transformer'] = analyzer_results
+                else:
+                    transformer_features_train = result
+                transformer_features_test = transformer.transform(smiles_test)
+            else:
+                transformer_features_train = transformer.transform(smiles_train)
+                transformer_features_test = transformer.transform(smiles_test)
             
             # Add transformer features to the preprocessed data
             transformer_cols = [f'transformer_{i}' for i in range(transformer_latent_dim)]

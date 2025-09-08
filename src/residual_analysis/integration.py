@@ -27,6 +27,11 @@ class ResidualAnalysisHook:
         if self.enable:
             self.analyzers[name] = analyzer
     
+    def save(self, results: Any, filename_prefix: str, save_pkl: bool = False, save_json: bool = False) -> None:
+        """Save results using the base analyzer"""
+        if self.enable and self.base_analyzer:
+            self.base_analyzer.save_results(results, filename_prefix, save_pkl=save_pkl, save_json=save_json)
+    
     def analyze_predictions(self, 
                           y_true: Any, 
                           y_pred: Any,

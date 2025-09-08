@@ -13,8 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Import the modules we need to test
 from residual_analysis import ResidualAnalyzer
-from data_processing import DataProcessor
-from cv import CrossValidation
 
 
 class TestCVResidualIntegration:
