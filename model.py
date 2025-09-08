@@ -54,7 +54,7 @@ PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Transformer settings - set to True to add transformer features
 USE_TRANSFORMER = False  # Whether to add transformer latent features
-TRANSFORMER_LATENT_DIM = 256  # Number of transformer latent dimensions
+TRANSFORMER_LATENT_DIM = 32  # Number of transformer latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
