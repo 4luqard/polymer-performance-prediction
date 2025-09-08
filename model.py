@@ -53,7 +53,7 @@ USE_PLS = False  # Whether to use PLS for dimensionality reduction
 PLS_N_COMPONENTS = 86  # Number of PLS components
 
 # Transformer settings - set to True to add transformer features
-USE_TRANSFORMER = True  # Whether to add transformer latent features
+USE_TRANSFORMER = False  # Whether to add transformer latent features
 TRANSFORMER_LATENT_DIM = 256  # Number of transformer latent dimensions
 
 # Import competition metric and CV functions only if not on Kaggle
@@ -62,6 +62,7 @@ if not IS_KAGGLE:
     from src.diagnostics import CVDiagnostics
     from cv import perform_cross_validation, perform_multi_seed_cv
     from config import LIGHTGBM_PARAMS
+    from src.residual_analysis import ResidualAnalysisHook, LightGBMResidualAnalyzer, should_run_analysis
 
 
 # Already checked above
@@ -291,6 +292,23 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         'Density': predictions[:, 3],
         'Rg': predictions[:, 4]
     })
+    
+    # Run residual analysis if enabled (only for validation data if available)
+    if not IS_KAGGLE and should_run_analysis():
+        residual_hook = ResidualAnalysisHook()
+        residual_hook.register_analyzer('lightgbm', LightGBMResidualAnalyzer())
+        
+        # Since we don't have test labels, we can analyze model characteristics
+        print("\nPerforming residual analysis on model characteristics...")
+        for i, target in enumerate(target_columns):
+            if target in locals() and 'model' in locals():
+                analyzer_results = residual_hook.analyze_model_specific(
+                    'lightgbm',
+                    model=model,
+                    predictions=predictions[:, i]
+                )
+                if analyzer_results:
+                    print(f"  Analyzed {target} model")
     
     # Save submission
     print(f"\nSaving submission to {SUBMISSION_PATH}...")

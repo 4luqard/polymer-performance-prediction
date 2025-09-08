@@ -19,6 +19,7 @@ warnings.filterwarnings('ignore')
 from src.competition_metric import neurips_polymer_metric
 from src.diagnostics import CVDiagnostics
 from config import LIGHTGBM_PARAMS
+from src.residual_analysis import ResidualAnalysisHook, should_run_analysis
 
 # PCA variance threshold - should match the one in model.py
 PCA_VARIANCE_THRESHOLD = None
@@ -248,6 +249,16 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         
         # Calculate competition metric
         fold_score, individual_scores = neurips_polymer_metric(y_fold_val, fold_pred_df, target_columns)
+        
+        # Run residual analysis if enabled
+        if should_run_analysis():
+            residual_hook = ResidualAnalysisHook()
+            residual_hook.analyze_predictions(
+                y_true=y_fold_val,
+                y_pred=fold_pred_df,
+                model_name=f'cv_{model_type}',
+                fold=fold
+            )
         
         if not np.isnan(fold_score):
             fold_scores.append(fold_score)
