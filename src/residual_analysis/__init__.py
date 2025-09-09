@@ -638,8 +638,14 @@ class ResidualAnalyzer:
         
         filepath = os.path.join(self.output_dir, filename)
         
-        # Save as parquet
-        df.to_parquet(filepath, engine='pyarrow', compression='snappy')
+        # Save as parquet (skip if pyarrow not available)
+        try:
+            df.to_parquet(filepath, engine='pyarrow', compression='snappy')
+        except ImportError:
+            # If pyarrow not available, save as CSV instead
+            csv_filename = filename.replace('.parquet', '.csv')
+            filepath = os.path.join(self.output_dir, csv_filename)
+            df.to_csv(filepath, index=False)
         
         return filepath
 

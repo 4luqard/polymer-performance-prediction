@@ -272,7 +272,13 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                 y_pred_train = pd.DataFrame(index=train_idx, columns=target_columns)
                 for i, target in enumerate(target_columns):
                     # Use median as prediction for simplicity in train set
-                    y_pred_train[target] = y_fold_train[target].median()
+                    # Handle cases where all values are NaN
+                    median_val = y_fold_train[target].median()
+                    if pd.isna(median_val):
+                        # If all values are NaN, use 0 as default
+                        y_pred_train[target] = 0
+                    else:
+                        y_pred_train[target] = median_val
                 
                 # Generate and save dataframes
                 residual_hook.generate_residuals_dataframe(

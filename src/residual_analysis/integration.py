@@ -130,13 +130,17 @@ class ResidualAnalysisHook:
             y_val_dict = y_val
         
         # Convert predictions to dict format if needed
-        if isinstance(y_pred_train, np.ndarray) and y_pred_train.ndim == 2:
+        if isinstance(y_pred_train, pd.DataFrame):
+            y_pred_train_dict = {col: y_pred_train[col].values for col in y_pred_train.columns}
+        elif isinstance(y_pred_train, np.ndarray) and y_pred_train.ndim == 2:
             targets = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
             y_pred_train_dict = {targets[i]: y_pred_train[:, i] for i in range(y_pred_train.shape[1])}
         else:
             y_pred_train_dict = y_pred_train
             
-        if isinstance(y_pred_val, np.ndarray) and y_pred_val.ndim == 2:
+        if isinstance(y_pred_val, pd.DataFrame):
+            y_pred_val_dict = {col: y_pred_val[col].values for col in y_pred_val.columns}
+        elif isinstance(y_pred_val, np.ndarray) and y_pred_val.ndim == 2:
             targets = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
             y_pred_val_dict = {targets[i]: y_pred_val[:, i] for i in range(y_pred_val.shape[1])}
         else:
