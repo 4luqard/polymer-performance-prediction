@@ -41,7 +41,7 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 
 # Dimensionality reduction settings (only one method should be enabled at a time)
 # PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = 0.99999
+PCA_VARIANCE_THRESHOLD = None#0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
 USE_AUTOENCODER = False
