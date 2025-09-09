@@ -299,6 +299,8 @@ def extract_molecular_features(smiles, rpt):
     smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '')
     
     features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
+    features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
+    features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
     features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
     features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
     features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
@@ -360,6 +362,8 @@ def extract_molecular_features(smiles, rpt):
                                     features['num_P'])
     
     features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
+    
+    features['carbon_percent'] = (features['num_C'] + features['num_c']) / features['heavy_atom_count']
     
     # Flexibility indicators
     features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
