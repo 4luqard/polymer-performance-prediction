@@ -247,6 +247,9 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         # For LightGBM, create a validation split from training data
                         from sklearn.model_selection import train_test_split
                         if len(X_target_final) > 20:  # Only split if we have enough data
+                            if target in ['FFV', 'Tc']:
+                                #y_target_complete = np.log1p(y_target_complete)
+                                y_target_complete = 1 / (1 + np.exp(-y_target_complete))
                             X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
                                 X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
                             )
@@ -272,6 +275,9 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     # Make predictions only for validation samples with complete features
                     if preprocessed and len(val_mask_indices) > 0 and X_val_final is not None:
                         predictions = model.predict(X_val_final)
+                        if target in ['FFV', 'Tc']:
+                            #predictions = np.expm1(predictions)
+                            predictions = -np.log((1 - predictions) / predictions)
                         # Map predictions back to original validation indices
                         for idx, pred in zip(val_complete_indices, predictions):
                             fold_predictions[idx, i] = pred

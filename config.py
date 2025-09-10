@@ -6,6 +6,7 @@ LIGHTGBM_PARAMS = {
     'objective': 'regression_l1',
     'metric': 'mae',
     'boosting_type': 'gbdt',
+    'extra_trees': True,
     'max_depth': -1,
     'num_leaves': 31,
     'n_estimators': 200,
