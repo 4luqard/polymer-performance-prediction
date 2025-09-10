@@ -300,6 +300,18 @@ def extract_molecular_features(smiles, rpt):
         features['max_long_chain_length'] = 0
         features['sum_long_chain_lengths'] = 0
 
+    ends = []
+    ends_re = re.findall(r'[0-9]', smiles)
+    for i in range(len(ends_re)):
+        ends.append(ends_re[i] == ends_re[i+1 if i+1 < len(ends_re) else i])
+    features['has_connected_rings'] = bool(ends.count(False))
+    if features['has_connected_rings'] == True:
+        features['num_connected_rings'] = ends.count(False)
+    else:
+        features['num_connected_rings'] = 0
+
+    del ends, ends_re
+
     # Count different atoms (case-sensitive for aromatic vs non-aromatic)
     # First count two-letter atoms to avoid double counting
     features['num_Cl'] = len(re.findall(r'Cl', smiles))
@@ -364,7 +376,6 @@ def extract_molecular_features(smiles, rpt):
     
     # Aromatic features
     features['num_aromatic_atoms'] = features['num_c'] + features['num_n'] + features['num_o'] + features['num_s']
-    features['aromatic_ratio'] = features['num_aromatic_atoms'] / max(features['length'], 1)
     
     # Calculate derived features
     features['heavy_atom_count'] = (features['num_C'] + features['num_c'] + 
@@ -389,6 +400,7 @@ def extract_molecular_features(smiles, rpt):
     features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
     
     features['carbon_percent'] = (features['num_C'] + features['num_c']) / (features['heavy_atom_count'] + features['ion_count'])
+    features['aromatic_ratio'] = features['num_aromatic_atoms'] / (features['heavy_atom_count'] + features['ion_count'])
     
     # Flexibility indicators
     features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
@@ -772,7 +784,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     
     # Impute missing values with zeros (fit on train, transform both)
     print("Imputing missing values with zeros...")
-    imputer = SimpleImputer(strategy='constant', fill_value=0)
+    imputer = SimpleImputer(strategy='constant', fill_value=0).set_output(transform='pandas')
     X_train_imputed = X_train #imputer.fit_transform(X_train)
     X_test_imputed = X_test #imputer.transform(X_test)
     
