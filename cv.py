@@ -14,6 +14,9 @@ import lightgbm as lgb
 from sklearn.metrics import mean_squared_error
 import warnings
 warnings.filterwarnings('ignore')
+import json
+from pathlib import Path
+from datetime import datetime
 
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
@@ -21,8 +24,182 @@ from src.diagnostics import CVDiagnostics
 from config import LIGHTGBM_PARAMS
 from src.residual_analysis import ResidualAnalysisHook, should_run_analysis
 
+# Import SHAP for feature importance
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
+    print("Warning: SHAP not available. Feature importance analysis will be skipped.")
+
 # PCA variance threshold - should match the one in model.py
 PCA_VARIANCE_THRESHOLD = None
+
+
+def calculate_shap_importance(model, X, sample_size=100):
+    """
+    Calculate SHAP-based feature importance for a trained model
+    
+    Args:
+        model: Trained model (LightGBM or similar)
+        X: Feature data (DataFrame or array)
+        sample_size: Number of samples to use for SHAP calculation (for efficiency)
+    
+    Returns:
+        Dictionary mapping feature names to importance scores
+    """
+    if not SHAP_AVAILABLE:
+        return {}
+    
+    try:
+        # Convert to DataFrame if needed
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X)
+        
+        # Sample data if too large
+        if len(X) > sample_size:
+            X_sample = X.sample(n=sample_size, random_state=42)
+        else:
+            X_sample = X
+        
+        # Create SHAP explainer
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_sample)
+        
+        # Calculate mean absolute SHAP values
+        if isinstance(shap_values, list):
+            # Multi-class case
+            shap_values = shap_values[0]
+        
+        mean_abs_shap = np.abs(shap_values).mean(axis=0)
+        
+        # Create importance dictionary
+        importance = {}
+        for i, col in enumerate(X.columns):
+            importance[col] = float(mean_abs_shap[i])
+        
+        return importance
+    
+    except Exception as e:
+        print(f"Warning: Failed to calculate SHAP importance: {e}")
+        return {}
+
+
+def aggregate_feature_importance(fold_importances):
+    """
+    Aggregate feature importance across multiple folds
+    
+    Args:
+        fold_importances: List of importance dictionaries from each fold
+    
+    Returns:
+        Dictionary with mean importance for each feature
+    """
+    if not fold_importances:
+        return {}
+    
+    # Get all features
+    all_features = set()
+    for importance in fold_importances:
+        all_features.update(importance.keys())
+    
+    # Calculate mean importance
+    aggregated = {}
+    for feature in all_features:
+        values = [imp.get(feature, 0) for imp in fold_importances]
+        aggregated[feature] = np.mean(values)
+    
+    return aggregated
+
+
+def save_feature_importance(feature_importance, output_path):
+    """
+    Save feature importance to JSON file
+    
+    Args:
+        feature_importance: Dictionary of feature importance
+        output_path: Path to save the JSON file
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Convert numpy types to Python types for JSON serialization
+    def convert_types(obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, (np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, (np.int32, np.int64)):
+            return int(obj)
+        elif isinstance(obj, dict):
+            return {k: convert_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_types(item) for item in obj]
+        return obj
+    
+    importance_json = convert_types(feature_importance)
+    
+    with open(output_path, 'w') as f:
+        json.dump(importance_json, f, indent=2)
+
+
+def update_features_md(feature_importance, features_path=None):
+    """
+    Update FEATURES.md with feature importance information
+    
+    Args:
+        feature_importance: Dictionary with target as key and feature importance dict as value
+        features_path: Path to FEATURES.md (defaults to project FEATURES.md)
+    """
+    if features_path is None:
+        features_path = Path(__file__).parent / 'FEATURES.md'
+    else:
+        features_path = Path(features_path)
+    
+    # Read existing content
+    if features_path.exists():
+        with open(features_path, 'r') as f:
+            content = f.read()
+    else:
+        content = "# Features\n\n"
+    
+    # Create feature importance section
+    importance_section = f"\n## Feature Importance (SHAP-based)\n\n"
+    importance_section += f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n"
+    
+    for target, importance in feature_importance.items():
+        if not importance:
+            continue
+            
+        importance_section += f"### {target}\n\n"
+        
+        # Sort features by importance
+        sorted_features = sorted(importance.items(), key=lambda x: x[1], reverse=True)
+        
+        # Add top features
+        importance_section += "| Feature | SHAP Importance |\n"
+        importance_section += "|---------|----------------|\n"
+        
+        for feature, score in sorted_features[:20]:  # Top 20 features
+            importance_section += f"| {feature} | {score:.4f} |\n"
+        
+        importance_section += "\n"
+    
+    # Check if feature importance section exists
+    if "## Feature Importance" in content or "# Feature Importance" in content:
+        # Replace existing section
+        import re
+        pattern = r'(##? Feature Importance.*?)(?=(##? [^#]|\Z))'
+        content = re.sub(pattern, importance_section, content, flags=re.DOTALL)
+    else:
+        # Append new section
+        content += importance_section
+    
+    # Write updated content
+    with open(features_path, 'w') as f:
+        f.write(content)
+    
+    print(f"Updated {features_path} with feature importance")
 
 
 def create_newsim_stratified_splits(X, y, cv_folds=5, random_seed=42):
@@ -84,7 +261,7 @@ def create_newsim_stratified_splits(X, y, cv_folds=5, random_seed=42):
     return splits
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None, calculate_feature_importance=False):
     """
     Perform cross-validation for separate models approach
     
@@ -97,6 +274,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         random_seed: Random seed for reproducibility
         model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
         preprocessed: Whether data is already preprocessed (default: True)
+        calculate_feature_importance: Whether to calculate SHAP feature importance
     
     Returns:
         Dictionary with CV scores
@@ -129,6 +307,9 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     # Store scores for each fold and target
     fold_scores = []
     target_fold_scores = {target: [] for target in target_columns}
+    
+    # Initialize feature importance tracking
+    target_feature_importance = {target: [] for target in target_columns} if calculate_feature_importance else None
     
     for fold, (train_idx, val_idx) in enumerate(splits):
         print(f"\nFold {fold + 1}/{cv_folds}...")
@@ -269,6 +450,21 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         model = Ridge(alpha=alpha, random_state=random_seed)
                         model.fit(X_target_final, y_target_complete)
                     
+                    # Calculate feature importance if requested and using LightGBM
+                    if calculate_feature_importance and model_type == 'lightgbm':
+                        # Create a DataFrame with proper column names for feature importance
+                        if preprocessed:
+                            # X_target_final is already a DataFrame with column names
+                            feature_df = X_target_final
+                        else:
+                            # Create DataFrame with generic feature names
+                            feature_df = pd.DataFrame(X_target_final, 
+                                                     columns=[f'feature_{j}' for j in range(X_target_final.shape[1])])
+                        
+                        importance = calculate_shap_importance(model, feature_df)
+                        if importance:
+                            target_feature_importance[target].append(importance)
+                    
                     # Initialize predictions with median for all samples
                     fold_predictions[:, i] = y_fold_train[target].median()
                     
@@ -289,19 +485,32 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     
                     # Track target training if diagnostics enabled
                     if cv_diagnostics:
-                        features_used = list(X_fold_train_selected.columns) if hasattr(X_fold_train_selected, 'columns') else [f'feature_{j}' for j in range(X_fold_train_selected.shape[1])]
+                        # Use X_target_final which is always defined
+                        features_used = list(X_target_final.columns) if hasattr(X_target_final, 'columns') else [f'feature_{j}' for j in range(X_target_final.shape[1])]
                         # Pass alpha value for diagnostics (use 1.0 for LightGBM as placeholder)
-                        alpha_for_diagnostics = alpha if model_type == 'ridge' else 1.0
+                        alpha_for_diagnostics = 1.0  # Default value for LightGBM
+                        if model_type == 'ridge':
+                            # Get alpha value for Ridge (defined in Ridge model section)
+                            target_alphas = {
+                                'Tg': 10.0,
+                                'FFV': 1.0,
+                                'Tc': 10.0,
+                                'Density': 5.0,
+                                'Rg': 10.0
+                            }
+                            alpha_for_diagnostics = target_alphas.get(target, 1.0)
+                        n_train_samples = len(X_target_final) if X_target_final is not None else len(train_mask_complete)
+                        n_val_samples = len(X_val_final) if X_val_final is not None else 0
                         cv_diagnostics.track_target_training(
                             fold, target, 
-                            len(X_target_complete), 
-                            len(X_val_complete) if len(val_mask_indices) > 0 and X_val_complete is not None else 0,
+                            n_train_samples, 
+                            n_val_samples,
                             features_used, 
                             alpha_for_diagnostics
                         )
                     
                     # Track predictions if diagnostics enabled
-                    if cv_diagnostics and len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
+                    if cv_diagnostics and len(val_mask_indices) > 0 and X_val_final is not None and len(X_val_final) > 0:
                         cv_diagnostics.track_predictions(
                             fold, target,
                             val_idx[val_complete_indices],
@@ -397,18 +606,47 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
             target_std = np.std(scores)
             print(f"{target}: {target_mean:.4f} (+/- {target_std:.4f})")
     
+    # Process feature importance if calculated
+    aggregated_importance = {}
+    if calculate_feature_importance and target_feature_importance:
+        print("\n=== Processing Feature Importance ===")
+        for target, fold_importances in target_feature_importance.items():
+            if fold_importances:
+                # Aggregate across folds
+                aggregated = aggregate_feature_importance(fold_importances)
+                aggregated_importance[target] = aggregated
+                
+                # Show top features for this target
+                if aggregated:
+                    sorted_features = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)[:10]
+                    print(f"\nTop 10 features for {target}:")
+                    for feat, imp in sorted_features:
+                        print(f"  {feat}: {imp:.4f}")
+        
+        # Save feature importance to JSON
+        save_feature_importance(aggregated_importance, 'feature_importance.json')
+        
+        # Update FEATURES.md
+        update_features_md(aggregated_importance)
+    
     # Finalize diagnostics if enabled
     if cv_diagnostics:
         cv_diagnostics.finalize_session(cv_mean, cv_std, fold_scores)
         report = cv_diagnostics.generate_summary_report()
         print("\n" + report)
     
-    return {
+    result = {
         'cv_mean': cv_mean,
         'cv_std': cv_std,
         'fold_scores': fold_scores,
         'target_scores': target_fold_scores
     }
+    
+    # Add feature importance to results if calculated
+    if aggregated_importance:
+        result['feature_importance'] = aggregated_importance
+    
+    return result
 
 
 def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm', preprocessed=True, smiles=None):
