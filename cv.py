@@ -261,7 +261,7 @@ def create_newsim_stratified_splits(X, y, cv_folds=5, random_seed=42):
     return splits
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None, calculate_feature_importance=False):
+def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None, calculate_feature_importance=True):
     """
     Perform cross-validation for separate models approach
     
@@ -608,7 +608,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     
     # Process feature importance if calculated
     aggregated_importance = {}
-    if calculate_feature_importance and target_feature_importance:
+    if calculate_feature_importance and target_feature_importance and random_seed == 456:
         print("\n=== Processing Feature Importance ===")
         for target, fold_importances in target_feature_importance.items():
             if fold_importances:
@@ -624,7 +624,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         print(f"  {feat}: {imp:.4f}")
         
         # Save feature importance to JSON
-        save_feature_importance(aggregated_importance, 'feature_importance.json')
+        # save_feature_importance(aggregated_importance, 'feature_importance.json')
         
         # Update FEATURES.md
         update_features_md(aggregated_importance)

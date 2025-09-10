@@ -290,6 +290,16 @@ def extract_molecular_features(smiles, rpt):
     # Basic string features
     features['length'] = len(smiles)
     
+    features['has_long_chain'] = bool(re.findall(rf'(C{{{5},}}.C+)', smiles))
+    if features['has_long_chain'] == True:
+        features['num_long_chain'] = len(re.findall(rf'(C{{{5},}}.C+)', smiles))
+        features['max_long_chain_length'] = max([len(chain) for chain in re.findall(rf'(C{{{5},}}.C+)', smiles)])
+        features['sum_long_chain_lengths'] = sum([len(chain) for chain in re.findall(rf'(C{{{5},}}.C+)', smiles)])
+    else:
+        features['num_long_chain'] = 0
+        features['max_long_chain_length'] = 0
+        features['sum_long_chain_lengths'] = 0
+
     # Count different atoms (case-sensitive for aromatic vs non-aromatic)
     # First count two-letter atoms to avoid double counting
     features['num_Cl'] = len(re.findall(r'Cl', smiles))
@@ -763,8 +773,8 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     # Impute missing values with zeros (fit on train, transform both)
     print("Imputing missing values with zeros...")
     imputer = SimpleImputer(strategy='constant', fill_value=0)
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_test_imputed = imputer.transform(X_test)
+    X_train_imputed = X_train #imputer.fit_transform(X_train)
+    X_test_imputed = X_test #imputer.transform(X_test)
     
     # Scale features (fit on train, transform both)
     print("Scaling features...")
