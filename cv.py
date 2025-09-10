@@ -25,6 +25,65 @@ from src.residual_analysis import ResidualAnalysisHook, should_run_analysis
 PCA_VARIANCE_THRESHOLD = None
 
 
+def create_newsim_stratified_splits(X, y, cv_folds=5, random_seed=42):
+    """
+    Create custom CV splits where validation sets only contain samples with new_sim == 1
+    
+    Args:
+        X: Features DataFrame (must contain 'new_sim' column)
+        y: Targets DataFrame
+        cv_folds: Number of cross-validation folds
+        random_seed: Random seed for reproducibility
+    
+    Returns:
+        List of (train_idx, val_idx) tuples
+    """
+    np.random.seed(random_seed)
+    
+    # Check if new_sim column exists
+    if 'new_sim' not in X.columns:
+        raise ValueError("X must contain 'new_sim' column for stratified splitting")
+    
+    # Get indices for new_sim samples
+    newsim_mask = X['new_sim'] == 1
+    newsim_indices = np.where(newsim_mask)[0]
+    non_newsim_indices = np.where(~newsim_mask)[0]
+    
+    # Shuffle new_sim indices for random fold assignment
+    newsim_indices_shuffled = newsim_indices.copy()
+    np.random.shuffle(newsim_indices_shuffled)
+    
+    # Calculate fold sizes for new_sim samples
+    n_newsim = len(newsim_indices_shuffled)
+    fold_sizes = np.full(cv_folds, n_newsim // cv_folds)
+    fold_sizes[:n_newsim % cv_folds] += 1
+    
+    # Create folds
+    splits = []
+    current_idx = 0
+    
+    for fold in range(cv_folds):
+        # Validation indices (only from new_sim == 1)
+        val_start = current_idx
+        val_end = current_idx + fold_sizes[fold]
+        val_idx = newsim_indices_shuffled[val_start:val_end]
+        
+        # Training indices (all non-new_sim + remaining new_sim)
+        train_newsim = np.concatenate([
+            newsim_indices_shuffled[:val_start],
+            newsim_indices_shuffled[val_end:]
+        ])
+        train_idx = np.concatenate([non_newsim_indices, train_newsim])
+        
+        # Shuffle training indices
+        np.random.shuffle(train_idx)
+        
+        splits.append((train_idx, val_idx))
+        current_idx = val_end
+    
+    return splits
+
+
 def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None):
     """
     Perform cross-validation for separate models approach
@@ -58,13 +117,20 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         # Track initial feature statistics
         cv_diagnostics.track_feature_statistics(X)
     
-    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
+    # Use custom splitting if new_sim column is present
+    if hasattr(X, 'columns') and 'new_sim' in X.columns:
+        print("Using new_sim stratified splitting (validation only from new_sim == 1)")
+        splits = create_newsim_stratified_splits(X, y, cv_folds=cv_folds, random_seed=random_seed)
+    else:
+        # Fallback to regular KFold
+        kf = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
+        splits = list(kf.split(X))
     
     # Store scores for each fold and target
     fold_scores = []
     target_fold_scores = {target: [] for target in target_columns}
     
-    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
+    for fold, (train_idx, val_idx) in enumerate(splits):
         print(f"\nFold {fold + 1}/{cv_folds}...")
         
         X_fold_train = X.iloc[train_idx] if hasattr(X, 'iloc') else X[train_idx]

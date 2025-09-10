@@ -252,11 +252,51 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
             # Train model for this target
             if model_type == 'lightgbm':
                 model = lgb.LGBMRegressor(**lgb_params)
-                # Split data for validation to track overfitting
-                X_tr, X_val, y_tr, y_val = train_test_split(
-                    X_target_final, y_target, 
-                    test_size=0.15, random_state=42
-                )
+                
+                # Custom validation split: only use new_sim == 1 for validation
+                # We need to track which samples have new_sim == 1
+                # Since X_target_final is already filtered, we need to map back to original indices
+                original_indices = np.where(mask.values)[0]  # Indices in original train_df
+                
+                # Check new_sim values for these samples
+                newsim_values = train_df.iloc[original_indices]['new_sim'].values
+                newsim_mask = newsim_values == 1
+                
+                # Separate new_sim and non-new_sim samples
+                newsim_indices = np.where(newsim_mask)[0]
+                non_newsim_indices = np.where(~newsim_mask)[0]
+                
+                # Calculate validation size (15% of total, but only from new_sim samples)
+                target_val_size = int(len(X_target_final) * 0.15)
+                
+                if len(newsim_indices) >= target_val_size:
+                    # We have enough new_sim samples for validation
+                    np.random.seed(42)
+                    np.random.shuffle(newsim_indices)
+                    val_indices = newsim_indices[:target_val_size]
+                    train_indices = np.concatenate([newsim_indices[target_val_size:], non_newsim_indices])
+                elif len(newsim_indices) > 0:
+                    # Use all new_sim samples for validation
+                    val_indices = newsim_indices
+                    train_indices = non_newsim_indices
+                else:
+                    # Fallback to regular split if no new_sim samples
+                    print(f"  Warning: No new_sim samples available for {target}, using regular split")
+                    X_tr, X_val, y_tr, y_val = train_test_split(
+                        X_target_final, y_target, 
+                        test_size=0.15, random_state=42
+                    )
+                    # Skip custom split logic
+                    val_indices = None
+                
+                if val_indices is not None:
+                    # Apply custom split
+                    X_val = X_target_final[val_indices]
+                    X_tr = X_target_final[train_indices]
+                    y_val = y_target.iloc[val_indices] if hasattr(y_target, 'iloc') else y_target[val_indices]
+                    y_tr = y_target.iloc[train_indices] if hasattr(y_target, 'iloc') else y_target[train_indices]
+                    print(f"  Validation: {len(val_indices)} samples (all new_sim), Train: {len(train_indices)} samples")
+                
                 # Train with validation data to see training progress
                 model.fit(
                     X_tr, y_tr,

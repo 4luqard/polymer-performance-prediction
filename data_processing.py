@@ -294,13 +294,14 @@ def extract_molecular_features(smiles, rpt):
     # First count two-letter atoms to avoid double counting
     features['num_Cl'] = smiles.count('Cl')
     features['num_Br'] = smiles.count('Br')
+    features['num_Si'] = smiles.count('Si')
     
     # Remove two-letter atoms before counting single letters
-    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '')
+    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '').replace('Si', '')
     
     features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
-    features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
-    features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
+    features['num_CC'] = smiles_no_cl_br.count('CC')
+    features['num_cc'] = smiles_no_cl_br.count('cc')
     features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
     features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
     features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
@@ -334,7 +335,7 @@ def extract_molecular_features(smiles, rpt):
     
     # Functional group patterns
     features['has_carbonyl'] = int('C(=O)' in smiles or 'C=O' in smiles)
-    # features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)  # Removed - may cause overfitting
+    features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)  # Removed - may cause overfitting
     features['has_ether'] = int('COC' in smiles or 'cOc' in smiles)
     features['has_amine'] = int('N' in smiles)
     features['has_sulfone'] = int('S(=O)(=O)' in smiles)
@@ -352,14 +353,14 @@ def extract_molecular_features(smiles, rpt):
                                    features['num_S'] + features['num_s'] + 
                                    features['num_F'] + features['num_Cl'] + 
                                    features['num_Br'] + features['num_I'] + 
-                                   features['num_P'])
+                                   features['num_P'] + features['num_Si'])
     
     features['heteroatom_count'] = (features['num_O'] + features['num_o'] + 
                                     features['num_N'] + features['num_n'] + 
                                     features['num_S'] + features['num_s'] + 
                                     features['num_F'] + features['num_Cl'] + 
                                     features['num_Br'] + features['num_I'] + 
-                                    features['num_P'])
+                                    features['num_P'] + features['num_Si'])
     
     features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
     
