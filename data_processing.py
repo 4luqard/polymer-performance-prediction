@@ -17,6 +17,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
+from extract_features import has_tetrahedral_carbon
 
 # Import residual analysis if available
 try:
@@ -326,8 +327,8 @@ def extract_molecular_features(smiles, rpt):
     features['num_nh'] = len(re.findall(r'[nH]', smiles))
     
     # Remove two-letter atoms before counting single letters
-    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '').replace('[Si]', '').replace('[N+]', '').replace('[O-]', '').replace('[nH]', '')
-    smiles_no_cl_br = smiles_no_cl_br.replace('[C@@H]', '').replace('[C@H]', '').replace('[C@@]', '').replace('[C@]', '')
+    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '').replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
+    #smiles_no_cl_br = smiles_no_cl_br.replace('[C@@H]', '').replace('[C@H]', '').replace('[C@@]', '').replace('[C@]', '')
     
     features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
     features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
@@ -503,7 +504,11 @@ def extract_molecular_features(smiles, rpt):
     
     # Additional structural patterns
     features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
-    features['has_spiro'] = int('@' in smiles)
+
+    # Stereochemistry
+    features['has_tetrahedral_carbon'] = int(has_tetrahedral_carbon(smiles))
+
+
     # Bridge: multiple different ring numbers
     ring_numbers = set(re.findall(r'[0-9]', smiles))
     features['has_bridge'] = int(len(ring_numbers) >= 2)
