@@ -119,6 +119,22 @@ def num_fused_rings(smiles):
                     'is_branched': is_branched
                 })
                 ring_id += 1
+            elif len(positions) == 1:
+                # Handle incomplete SMILES with unclosed rings
+                # Treat single ring marker as a complete ring from that position to end
+                start_pos, start_atom, start_branch = positions[0]
+                # Assume ring closes at the last atom
+                end_atom = atom_index - 1 if atom_index > 0 else start_atom
+                
+                rings.append({
+                    'id': ring_id,
+                    'number': ring_num,
+                    'start_atom': start_atom,
+                    'end_atom': end_atom,
+                    'atom_range': (min(start_atom, end_atom), max(start_atom, end_atom)),
+                    'is_branched': start_branch
+                })
+                ring_id += 1
     
     # Separate main chain and branched rings
     main_rings = [r for r in rings if not r['is_branched']]
@@ -224,8 +240,13 @@ def longest_chain_atom_count(smiles):
     while i < len(smiles):
         char = smiles[i]
         
-        # Skip special markers and bond types
-        if char in '*=#-+./@\\':
+        # Skip special markers and bond types (but not atom markers)
+        if char in '*=-+./@\\':
+            i += 1
+            continue
+        
+        # Handle triple bond specially to not skip following atom  
+        elif char == '#':
             i += 1
             continue
             
@@ -316,6 +337,17 @@ def longest_chain_atom_count(smiles):
     
     if not atoms:
         return 0
+    
+    # Close any unclosed rings (for incomplete SMILES)
+    # For each unclosed ring, we assume there's a virtual atom that would close it
+    for ring_num, atom_idx in ring_closures.items():
+        if 0 <= atom_idx < len(atoms):
+            # Add a virtual atom to close the ring
+            virtual_atom_idx = len(atoms)
+            atoms.append('C')  # Assume it's a carbon
+            if last_atom_idx >= 0:
+                bonds.append((last_atom_idx, virtual_atom_idx))
+            bonds.append((atom_idx, virtual_atom_idx))
     
     # Build adjacency list
     n = len(atoms)

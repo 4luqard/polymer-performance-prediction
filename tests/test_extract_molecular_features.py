@@ -27,6 +27,9 @@ def test_num_tetrahedral_carbon():
     # Test 5: Empty SMILES string
     assert num_tetrahedral_carbon('') == 0
 
+    # Test 6: Incomplete SMILES strings
+    assert num_tetrahedral_carbon('Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C') == 2
+
 def test_longest_chain_atom_count():
     # Test 1: Has two branches ('(=O)') but they are short chains,
     # main chain 'C-C-C-C-C-C-C-C-C-C-C-C-C-C-C-C-C-C-N-C-N-C-C-C-C-C-C-N-C-N' is the longest chain of atoms, it has 30 atoms
@@ -51,6 +54,9 @@ def test_longest_chain_atom_count():
     # Test 6: Empty SMILES string
     assert longest_chain_atom_count('') == 0
 
+    # Test 7: Incomplete SMILES strings
+    assert longest_chain_atom_count('Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C') == 15
+
 def test_num_fused_rings():
     # Test 1: Number of fused rings are 2 since before ring 1 is closed another ring starts without branching,
     # meaning they share some of the aromatic or regular atoms
@@ -70,6 +76,9 @@ def test_num_fused_rings():
 
     # Test 5: Empty SMILES string
     assert num_fused_rings('') == 0
+
+    # Test 6: Incomplete SMILES strings
+    assert num_fused_rings('Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C') == 4
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

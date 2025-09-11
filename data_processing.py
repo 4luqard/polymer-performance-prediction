@@ -17,7 +17,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
-from extract_features import has_tetrahedral_carbon, num_tetrahedral_carbon
+from extract_features import *
 
 # Import residual analysis if available
 try:
@@ -290,44 +290,28 @@ def extract_molecular_features(smiles, rpt):
     
     # Basic string features
     features['length'] = len(smiles)
-    
-    features['has_long_chain'] = bool(re.findall(rf'(C{{{5},}}.C+)', smiles))
-    if features['has_long_chain'] == True:
-        features['num_long_chain'] = len(re.findall(rf'(C{{{5},}}.C+)', smiles))
-        features['max_long_chain_length'] = max([len(chain) for chain in re.findall(rf'(C{{{5},}}.C+)', smiles)])
-        features['sum_long_chain_lengths'] = sum([len(chain) for chain in re.findall(rf'(C{{{5},}}.C+)', smiles)])
-    else:
-        features['num_long_chain'] = 0
-        features['max_long_chain_length'] = 0
-        features['sum_long_chain_lengths'] = 0
 
-    ends = []
-    ends_re = re.findall(r'[0-9]', smiles)
-    for i in range(len(ends_re)):
-        ends.append(ends_re[i] == ends_re[i+1 if i+1 < len(ends_re) else i])
-    features['has_connected_rings'] = bool(ends.count(False))
-    if features['has_connected_rings'] == True:
-        features['num_connected_rings'] = ends.count(False)
-    else:
-        features['num_connected_rings'] = 0
+    # Number of atoms on the longest chain of atoms
+    features['longest_chain_atom_count'] = longest_chain_atom_count(smiles)
 
-    del ends, ends_re
+    # Number of rings fused together
+    features['num_fused_rings'] = num_fused_rings(smiles)
 
     # Count different atoms (case-sensitive for aromatic vs non-aromatic)
     # First count two-letter atoms to avoid double counting
     features['num_Cl'] = len(re.findall(r'Cl', smiles))
     features['num_Br'] = len(re.findall(r'Br', smiles))
-    features['num_Si'] = len(re.findall(r'[Si]', smiles))
-    features['num_Npos'] = len(re.findall(r'[N+]', smiles))
-    features['num_Oneg'] = len(re.findall(r'[O-]', smiles))
-    features['num_nh'] = len(re.findall(r'[nH]', smiles))
+    # features['num_Si'] = len(re.findall(r'[Si]', smiles))
+    # features['num_Npos'] = len(re.findall(r'[N+]', smiles))
+    # features['num_Oneg'] = len(re.findall(r'[O-]', smiles))
+    # features['num_nh'] = len(re.findall(r'[nH]', smiles))
     
     # Remove two-letter atoms before counting single letters
-    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '').replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
+    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '') #.replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
 
     features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
-    features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
-    features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
+    # features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
+    # features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
     features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
     features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
     features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
@@ -335,10 +319,13 @@ def extract_molecular_features(smiles, rpt):
     features['num_n'] = len(re.findall(r'n', smiles_no_cl_br))  # aromatic nitrogen
     features['num_S'] = len(re.findall(r'S', smiles_no_cl_br))
     features['num_s'] = len(re.findall(r's', smiles_no_cl_br))  # aromatic sulfur
-    features['num_F'] = len(re.findall(r'F', smiles_no_cl_br))
-    features['num_I'] = len(re.findall(r'I', smiles_no_cl_br))
-    features['num_P'] = len(re.findall(r'P', smiles_no_cl_br))
-    
+    features['num_F'] = smiles_no_cl_br.count('F')
+    features['num_I'] = smiles_no_cl_br.count('I')
+    features['num_P'] = smiles_no_cl_br.count('P')
+
+    # Stereochemistry
+    features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
+
     # Count bonds
     features['num_single_bonds'] = smiles.count('-')
     features['num_double_bonds'] = smiles.count('=')
@@ -357,12 +344,12 @@ def extract_molecular_features(smiles, rpt):
     # Polymer-specific features
     features['has_polymer_end'] = int('*' in smiles)
     features['num_polymer_ends'] = smiles.count('*')
-    features['has_polymer_end_branch'] = int('(*)' in smiles)
+    # features['has_polymer_end_branch'] = int('(*)' in smiles)
     
     # Functional group patterns
     features['has_carbonyl'] = int('C(=O)' in smiles or 'C=O' in smiles)
-    features['has_cfthree'] = int('C(F)(F)F' in smiles)
-    features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)  # Removed - may cause overfitting
+    # features['has_cfthree'] = int('C(F)(F)F' in smiles)
+    # features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)  # Removed - may cause overfitting
     features['has_ether'] = int('COC' in smiles or 'cOc' in smiles)
     features['has_amine'] = int('N' in smiles)
     features['has_sulfone'] = int('S(=O)(=O)' in smiles)
@@ -370,7 +357,7 @@ def extract_molecular_features(smiles, rpt):
     features['has_amide'] = int('C(=O)N' in smiles or 'CON' in smiles)
     
     # Aromatic features
-    features['num_aromatic_atoms'] = features['num_c'] + features['num_n'] + features['num_o'] + features['num_s']
+    # features['num_aromatic_atoms'] = features['num_c'] + features['num_n'] + features['num_o'] + features['num_s']
     
     # Calculate derived features
     features['heavy_atom_count'] = (features['num_C'] + features['num_c'] + 
@@ -388,14 +375,14 @@ def extract_molecular_features(smiles, rpt):
                                     features['num_Br'] + features['num_I'] + 
                                     features['num_P'])
     
-    features['ion_count'] = (features['num_Si'] + features['num_Oneg'] + 
-                            features['num_Npos'])
+    # features['ion_count'] = (features['num_Si'] + features['num_Oneg'] +
+    #                         features['num_Npos'])
 
     
     features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
     
-    features['carbon_percent'] = (features['num_C'] + features['num_c']) / (features['heavy_atom_count'] + features['ion_count'])
-    features['aromatic_ratio'] = features['num_aromatic_atoms'] / (features['heavy_atom_count'] + features['ion_count'])
+    # features['carbon_percent'] = (features['num_C'] + features['num_c']) / (features['heavy_atom_count'] + features['ion_count'])
+    # features['aromatic_ratio'] = features['num_aromatic_atoms'] / (features['heavy_atom_count'] + features['ion_count'])
     
     # Flexibility indicators
     features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
@@ -497,11 +484,7 @@ def extract_molecular_features(smiles, rpt):
     features['chain_length_estimate'] = max(len(x) for x in segments) if segments else 0
     
     # Additional structural patterns
-    features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
-
-    # Stereochemistry
-    features['has_tetrahedral_carbon'] = int(has_tetrahedral_carbon(smiles))
-    features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
+    # features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
 
     # Bridge: multiple different ring numbers
     ring_numbers = set(re.findall(r'[0-9]', smiles))
@@ -554,7 +537,7 @@ def prepare_features(df):
     features_list = []
     
     for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing molecules"):
-        if '*' in row['SMILES']:
+        if False: #'*' in row['SMILES']:
             row['SMILES_rpt'] = row['SMILES'].split('*')[1]
             for col in ['SMILES', 'SMILES_rpt']:
                 rpt = False if col == 'SMILES' else True
@@ -564,7 +547,7 @@ def prepare_features(df):
                 if rpt:
                     features_rpt = features
                 else:
-                    features_full = features
+                   features_full = features
             features_list.append(features_full | features_rpt)
         else:
             features = extract_molecular_features(row['SMILES'], False)
