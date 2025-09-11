@@ -17,7 +17,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
-from extract_features import has_tetrahedral_carbon
+from extract_features import has_tetrahedral_carbon, num_tetrahedral_carbon
 
 # Import residual analysis if available
 try:
@@ -320,16 +320,11 @@ def extract_molecular_features(smiles, rpt):
     features['num_Si'] = len(re.findall(r'[Si]', smiles))
     features['num_Npos'] = len(re.findall(r'[N+]', smiles))
     features['num_Oneg'] = len(re.findall(r'[O-]', smiles))
-    features['num_cooh'] = len(re.findall(r'[C@@H]', smiles))
-    features['num_coh'] = len(re.findall(r'[C@H]', smiles))
-    features['num_coo'] = len(re.findall(r'[C@@]', smiles))
-    features['num_co'] = len(re.findall(r'[C@]', smiles))
     features['num_nh'] = len(re.findall(r'[nH]', smiles))
     
     # Remove two-letter atoms before counting single letters
     smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '').replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
-    #smiles_no_cl_br = smiles_no_cl_br.replace('[C@@H]', '').replace('[C@H]', '').replace('[C@@]', '').replace('[C@]', '')
-    
+
     features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
     features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
     features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
@@ -358,8 +353,7 @@ def extract_molecular_features(smiles, rpt):
             ring_closures.add(str(i))
     features['num_rings'] = len(ring_closures)
     features['num_branches'] = smiles.count('(')
-    features['num_chiral_centers'] = smiles.count('@')
-    
+
     # Polymer-specific features
     features['has_polymer_end'] = int('*' in smiles)
     features['num_polymer_ends'] = smiles.count('*')
@@ -409,7 +403,7 @@ def extract_molecular_features(smiles, rpt):
     
     # Size and complexity
     features['molecular_complexity'] = (features['num_rings'] + features['num_branches'] + 
-                                       features['num_chiral_centers'])
+                                       features['num_tetrahedral_carbon'])
     
     # Molecular weight estimation (for Tg prediction based on Newton's second law)
     # Atomic weights with 0.1 significance as requested
@@ -507,7 +501,7 @@ def extract_molecular_features(smiles, rpt):
 
     # Stereochemistry
     features['has_tetrahedral_carbon'] = int(has_tetrahedral_carbon(smiles))
-
+    features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
 
     # Bridge: multiple different ring numbers
     ring_numbers = set(re.findall(r'[0-9]', smiles))

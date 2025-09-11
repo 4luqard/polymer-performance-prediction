@@ -8,22 +8,15 @@ import sys
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from data_processing import extract_molecular_features
+from extract_features import *
 
-@pytest.fixture
-def smiles():
-    return {
-        'has_multi_spiro': '*Nc1ccc([C@H]2[C@@H]3C[C@H]4C[C@@H](C3)C[C@@H]2C4)cc1N*',
-        'has_single_spiro': '*Nc1ccc(23C[C@H]4C(C3)C2C4)cc1N*',
-    }
+def test_has_tetrahedral_carbon():
+    assert has_tetrahedral_carbon('*Nc1ccc(23C[C@H]4C(C3)C2C4)cc1N*') # Test 1: Has '@' so there is tethrahedral carbon
 
-def test_has_multi_spiro(smiles):
-    features = extract_molecular_features(smiles['has_multi_spiro'], False)
-    assert features['has_spiro'] == True
-
-def test_has_single_spiro(smiles):
-    features = extract_molecular_features(smiles['has_single_spiro'], False)
-    assert features['has_spiro'] == True
+def test_num_tetrahedral_carbon():
+    assert num_tetrahedral_carbon('*Nc1ccc(23C[C@H]4C(C3)C2C4)cc1N*') == 1 # Test 1: Has 1 "@" so there is a single tetrahedral carbon
+    assert num_tetrahedral_carbon('*Nc1ccc(23C[C@@H]4C(C3)C2C4)cc1N*') == 1 # Test 2: Has 2 "@" but when two '@'s are next to each other ('@@') than that specifies the configuration of tetrahedral carbon so there is only one tetrahedral carbon
+    assert num_tetrahedral_carbon('*Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C*))cc1N*') == 2 # Test 3: Has 3 "@" but two '@'s are next to each other so there are only two tetrahedral carbons ("@@", '@')
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
