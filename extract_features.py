@@ -31,14 +31,20 @@ def num_tetrahedral_carbon(smiles):
     if not smiles:
         return 0
     
-    # Replace '@@' with a placeholder to count it as single stereocenter
-    modified_smiles = smiles.replace('@@', '#')
+    count = 0
+    i = 0
+    while i < len(smiles):
+        if smiles[i] == '@':
+            # Check if it's part of '@@'
+            if i + 1 < len(smiles) and smiles[i + 1] == '@':
+                # Found '@@', count as one stereocenter
+                count += 1
+                i += 2  # Skip both '@' symbols
+            else:
+                # Found single '@', count as one stereocenter
+                count += 1
+                i += 1
+        else:
+            i += 1
     
-    # Count remaining '@' symbols
-    single_at_count = modified_smiles.count('@')
-    
-    # Count the placeholders (which represent '@@')
-    double_at_count = modified_smiles.count('#')
-    
-    # Total count is single '@' plus '@@' occurrences
-    return single_at_count + double_at_count
+    return count
