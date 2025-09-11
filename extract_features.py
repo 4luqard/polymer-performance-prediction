@@ -1,5 +1,166 @@
 #!/usr/bin/env python3
 
+def num_fused_rings(smiles):
+    """
+    Count the number of fused rings in a SMILES string.
+    
+    Fused rings share at least two consecutive atoms (an edge).
+    Rings in branches marked with '-' are considered separately.
+    
+    Args:
+        smiles (str): SMILES string representation of the molecule
+        
+    Returns:
+        int: Total number of fused rings
+    """
+    if not smiles:
+        return 0
+    
+    # Parse SMILES to identify all rings with branch context
+    ring_positions = {}  # ring_number -> [(position, atom_index, in_branch)]
+    atom_index = 0
+    i = 0
+    in_branch = False
+    paren_stack = []
+    
+    while i < len(smiles):
+        char = smiles[i]
+        
+        # Check for branch marker (-c or -C followed by ring in parentheses)
+        if char == '-' and i + 1 < len(smiles):
+            next_char = smiles[i + 1]
+            if next_char in 'cC' and i + 2 < len(smiles):
+                # Look ahead for ring digit after potential branch
+                j = i + 2
+                while j < len(smiles) and j < i + 10:
+                    if smiles[j].isdigit():
+                        # Found a ring after -c, this indicates a branch
+                        in_branch = True
+                        break
+                    elif smiles[j] == '(':
+                        break
+                    j += 1
+        
+        # Handle parentheses
+        if char == '(':
+            # Check if this is a branch opening  
+            if i > 0 and smiles[i-1] == '-':
+                in_branch = True
+            paren_stack.append(in_branch)
+            i += 1
+            continue
+        elif char == ')':
+            if paren_stack:
+                paren_stack.pop()
+            in_branch = paren_stack[-1] if paren_stack else False
+            i += 1
+            continue
+        
+        # Skip special chars that don't represent atoms
+        if char in '[]+-=#@./*':
+            i += 1
+            continue
+        
+        # Check for ring markers (single digit 1-9)
+        if char.isdigit():
+            ring_num = int(char)
+            if ring_num not in ring_positions:
+                ring_positions[ring_num] = []
+            ring_positions[ring_num].append((i, atom_index, in_branch))
+            i += 1
+            continue
+        
+        # Check for two-digit ring numbers (%10-%99)
+        if char == '%' and i + 2 < len(smiles):
+            if smiles[i+1:i+3].isdigit():
+                ring_num = int(smiles[i+1:i+3])
+                if ring_num not in ring_positions:
+                    ring_positions[ring_num] = []
+                ring_positions[ring_num].append((i, atom_index, in_branch))
+                i += 3
+                continue
+        
+        # Count atoms (element symbols)
+        if char.isalpha():
+            # Handle two-letter elements
+            if char in 'BCNOSPF' and i + 1 < len(smiles):
+                next_char = smiles[i + 1]
+                if char + next_char in ['Cl', 'Br', 'Si', 'Se', 'As', 'Al', 'Mg', 'Ca', 'Fe', 'Cu', 'Zn']:
+                    atom_index += 1
+                    i += 2
+                    continue
+            
+            atom_index += 1
+            i += 1
+            continue
+        
+        i += 1
+    
+    # Create list of rings from positions
+    rings = []
+    ring_id = 0
+    
+    for ring_num, positions in ring_positions.items():
+        # Pair up opens and closes
+        for j in range(0, len(positions), 2):
+            if j + 1 < len(positions):
+                start_pos, start_atom, start_branch = positions[j]
+                end_pos, end_atom, end_branch = positions[j + 1]
+                
+                # Ring is in branch if either endpoint is in branch
+                is_branched = start_branch or end_branch
+                
+                rings.append({
+                    'id': ring_id,
+                    'number': ring_num,
+                    'start_atom': start_atom,
+                    'end_atom': end_atom,
+                    'atom_range': (min(start_atom, end_atom), max(start_atom, end_atom)),
+                    'is_branched': is_branched
+                })
+                ring_id += 1
+    
+    # Separate main chain and branched rings
+    main_rings = [r for r in rings if not r['is_branched']]
+    branch_rings = [r for r in rings if r['is_branched']]
+    
+    # Find fused rings in main chain
+    fused_rings = set()
+    
+    for i in range(len(main_rings)):
+        for j in range(i + 1, len(main_rings)):
+            ring1 = main_rings[i]
+            ring2 = main_rings[j]
+            
+            # Check if rings share at least 2 atoms
+            start1, end1 = ring1['atom_range']
+            start2, end2 = ring2['atom_range']
+            
+            overlap_start = max(start1, start2)
+            overlap_end = min(end1, end2)
+            
+            if overlap_end - overlap_start >= 1:
+                fused_rings.add(ring1['id'])
+                fused_rings.add(ring2['id'])
+    
+    # Find fused rings in branches (they fuse among themselves, not with main chain)
+    for i in range(len(branch_rings)):
+        for j in range(i + 1, len(branch_rings)):
+            ring1 = branch_rings[i]
+            ring2 = branch_rings[j]
+            
+            start1, end1 = ring1['atom_range']
+            start2, end2 = ring2['atom_range']
+            
+            overlap_start = max(start1, start2)
+            overlap_end = min(end1, end2)
+            
+            if overlap_end - overlap_start >= 1:
+                fused_rings.add(ring1['id'])
+                fused_rings.add(ring2['id'])
+    
+    return len(fused_rings)
+
 def num_tetrahedral_carbon(smiles):
     """
     Count the number of tetrahedral carbon stereocenters in a SMILES string.
