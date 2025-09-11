@@ -1,3 +1,4 @@
+# %% [code]
 #!/usr/bin/env python3
 
 def num_fused_rings(smiles):
