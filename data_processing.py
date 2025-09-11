@@ -503,7 +503,7 @@ def extract_molecular_features(smiles, rpt):
     
     # Additional structural patterns
     features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
-    features['has_spiro'] = int('@' in smiles and smiles.count('@') > 1)
+    features['has_spiro'] = int('@' in smiles)
     # Bridge: multiple different ring numbers
     ring_numbers = set(re.findall(r'[0-9]', smiles))
     features['has_bridge'] = int(len(ring_numbers) >= 2)
