@@ -21,8 +21,11 @@ def test_num_tetrahedral_carbon():
     # Test 3: Has 3 "@" but two '@'s are next to each other so there are only two tetrahedral carbons ("@@", '@')
     assert num_tetrahedral_carbon('*Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C*))cc1N*') == 2
 
-    # Test4: When there are no '@'
+    # Test 4: When there are no '@'
     assert num_tetrahedral_carbon('*Nc1ccc(23C4C(C3)C2C4(C#C*))cc1N*') == 0
+
+    # Test 5: Empty SMILES string
+    assert num_tetrahedral_carbon('') == 0
 
 def test_longest_chain_atom_count():
     # Test 1: Has two branches ('(=O)') but they are short chains,
@@ -44,6 +47,29 @@ def test_longest_chain_atom_count():
 
     # Test 5: Longest chain: 'c-c-c-c-C-c-c-c-c-N-C-c-c-c-c-O-C-C-N-c-c-c-c-C-C-c-c-c-c-N-O-O' has 34 atoms in its longest chain
     assert longest_chain_atom_count('*c1ccc(Cc2ccc(N3C(=O)c4ccc(OCCN(CCOc5ccc6c(c5)C(=O)N(*)C6=O)c5ccc(C=Cc6ccc([N+](=O)[O-])cc6)cc5)cc4C3=O)cc2)cc1') == 34
+
+    # Test 6: Empty SMILES string
+    assert longest_chain_atom_count('') == 0
+
+def test_num_fused_rings():
+    # Test 1: Number of fused rings are 2 since before ring 1 is closed another ring starts without branching,
+    # meaning they share some of the aromatic or regular atoms
+    assert num_fused_rings('*c1ccc2cc(*)ccc2c1') == 2
+
+    # Test 2: Number of fused rings are 8 since rings 1,2,3 are fused and rings 4,5,6 are fused together but they are a branch so they are not fused with rings 1,2,3
+    # There are two of ring 1 and ring 4
+    assert num_fused_rings('*c1ccc2c(c1)SC1=Nc3cc(-c4ccc5c(c4)N=C4Sc6cc(*)ccc6N=C4N5)ccc3NC1=N2') == 8
+
+    # Test 3: Number of fused rings are 3 since rings 1,2 are gused while the ring 3 is a ring that has branched so it is not fused
+    # There are two of ring 1
+    assert num_fused_rings('*c1ccc2c(c1)C(CCCCCC)(CCCCCC)c1cc(-c3cc(CCCCCCCCCC)c(*)cc3CCCCCCCCCC)ccc1-2') == 3
+
+    # Test 4: Number of fused rings are 7, there are actually 7 rings, ring 4 and 5 are named two times so there are two of them,
+    # rings 1,2,3 and one of the 4s are fused together, and the other ring 4 and the two ring 5s are fused together but in a branch
+    assert num_fused_rings('*=c1cc2ccc3cc(=c4c5ccccc5c(=*)c5ccccc45)cc4ccc(c1)c2c34') == 7
+
+    # Test 5: Empty SMILES string
+    assert num_fused_rings('') == 0
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
