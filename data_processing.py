@@ -287,8 +287,8 @@ def calculate_average_bond_length(smiles):
 def extract_molecular_features(smiles, rpt):
     """Extract features from SMILES string without external libraries"""
     features = {}
-    elements = ['B', 'C', 'N', 'O', 'F', '[Na]', '[Si]', 'P', 'S',
-                'Cl', '[Ca]', '[Ge]', '[Se]', 'Br', '[Cd]', '[Sn]', '[Te]']
+    elements = ['B', 'C', 'N', 'O', 'F', 'Na', 'Si', 'P', 'S',
+                'Cl', 'Ca', 'Ge', 'Se', 'Br', 'Cd', 'Sn', 'Te']
     aromatic_atoms = ['b', 'c', 'n', 'o', 'p', 's']
 
     # Basic string features
@@ -302,33 +302,11 @@ def extract_molecular_features(smiles, rpt):
     features['num_rings'] = num_rings(smiles) # No units
 
     # Atom count features, excluding Hydrogen
-    features |= element_count(smiles, elements)
+    features |= element_count(smiles, elements) # No units
+    features |= element_count(smiles, aromatic_atoms) # No units
 
-    # Count different atoms (case-sensitive for aromatic vs non-aromatic)
-    # First count two-letter atoms to avoid double counting
-    # features['num_Cl'] = len(re.findall(r'Cl', smiles))
-    # features['num_Br'] = len(re.findall(r'Br', smiles))
-    # features['num_Si'] = len(re.findall(r'[Si]', smiles))
-    # features['num_Npos'] = len(re.findall(r'[N+]', smiles))
-    # features['num_Oneg'] = len(re.findall(r'[O-]', smiles))
-    # features['num_nh'] = len(re.findall(r'[nH]', smiles))
-    
-    # Remove two-letter atoms before counting single letters
-    # smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '') #.replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
-
-    # features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
-    # features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
-    # features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
-    # features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
-    # features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
-    # features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
-    # features['num_N'] = len(re.findall(r'N', smiles_no_cl_br))
-    # features['num_n'] = len(re.findall(r'n', smiles_no_cl_br))  # aromatic nitrogen
-    # features['num_S'] = len(re.findall(r'S', smiles_no_cl_br))
-    # features['num_s'] = len(re.findall(r's', smiles_no_cl_br))  # aromatic sulfur
-    # features['num_F'] = smiles_no_cl_br.count('F')
-    # features['num_I'] = smiles_no_cl_br.count('I')
-    # features['num_P'] = smiles_no_cl_br.count('P')
+    # Number of Hydrogens
+    features['H'] = hydrogen_amount(smiles)
 
     # Stereochemistry
     features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
@@ -376,10 +354,6 @@ def extract_molecular_features(smiles, rpt):
     #                                 features['num_Br'] + features['num_I'] +
     #                                 features['num_P'])
 
-    # features['ion_count'] = (features['num_Si'] + features['num_Oneg'] +
-    #                         features['num_Npos'])
-
-    
     # features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
 
     # features['carbon_percent'] = (features['num_C'] + features['num_c']) / (features['heavy_atom_count'] + features['ion_count'])

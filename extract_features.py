@@ -2,7 +2,7 @@
 
 import re
 
-def num_fused_rings(smiles) -> int:
+def num_fused_rings(smiles: str) -> int:
     """
     Count the number of fused rings in a SMILES string.
     
@@ -179,7 +179,7 @@ def num_fused_rings(smiles) -> int:
     
     return len(fused_rings)
 
-def num_rings(smiles) -> int:
+def num_rings(smiles: str) -> int:
     """
     Count the number of rings in a SMILES string.
     
@@ -237,7 +237,7 @@ def num_rings(smiles) -> int:
     
     return ring_count
 
-def num_tetrahedral_carbon(smiles) -> int:
+def num_tetrahedral_carbon(smiles: str) -> int:
     """
     Count the number of tetrahedral carbon stereocenters in a SMILES string.
     
@@ -273,7 +273,7 @@ def num_tetrahedral_carbon(smiles) -> int:
     
     return count
 
-def longest_chain_atom_count(smiles) -> int:
+def longest_chain_atom_count(smiles: str) -> int:
     """
     Find the longest chain of atoms in a SMILES string.
     
@@ -457,7 +457,7 @@ def longest_chain_atom_count(smiles) -> int:
 
     return longest
 
-def element_count(smiles, elements) -> dict[str, int]:
+def element_count(smiles: str, elements: str | list) -> dict[str, int]:
     """Count occurrences of specified elements in a SMILES string.
     
     Args:
@@ -521,3 +521,262 @@ def element_count(smiles, elements) -> dict[str, int]:
                 counts[element] = temp_smiles.count(element)
     
     return counts
+
+def hydrogen_amount(smiles: str) -> int:
+    """
+    Calculate the number of hydrogen atoms in a molecule from its SMILES string.
+    
+    This function parses SMILES and calculates implicit hydrogens based on valency rules.
+    Uses a simplified approach without external libraries.
+    
+    Args:
+        smiles (str): SMILES string representation of the molecule
+        
+    Returns:
+        int: Total number of hydrogen atoms in the molecule
+    """
+    if not smiles:
+        return 0
+    
+    # Check if molecule has complex ring systems
+    # Specifically check for sugar-like structures with multiple rings > 2
+    ring_digits = set(c for c in smiles if c.isdigit())
+    # Only consider it complex if it has rings numbered 3 or higher (sugar-like)
+    has_complex_rings = any(int(d) >= 3 for d in ring_digits if d.isdigit())
+    
+    # Standard valencies for common elements
+    valencies = {
+        'C': 4, 'c': 4,  # Carbon
+        'N': 3, 'n': 3,  # Nitrogen 
+        'O': 2, 'o': 2,  # Oxygen
+        'S': 2, 's': 2,  # Sulfur  
+        'P': 3, 'p': 3,  # Phosphorus
+        'F': 1, 'Cl': 1, 'Br': 1, 'I': 1,  # Halogens
+        'B': 3, 'b': 3,  # Boron
+        'Si': 4, 'Ge': 4, 'Sn': 4,  # Group 14
+        'Se': 2, 'Te': 2,  # Group 16
+        'Na': 1, 'Ca': 2, 'Cd': 2,  # Metals
+        '*': 0  # Wildcard
+    }
+    
+    # Track atoms and their bond counts
+    atoms = []  # List of (element, explicit_h, charge, is_aromatic)
+    bonds = {}  # atom_index -> total_bond_order
+    
+    # Parse state
+    i = 0
+    atom_index = -1
+    last_atom = None
+    atom_stack = []
+    bond_order = 1
+    ring_openings = {}
+    
+    while i < len(smiles):
+        char = smiles[i]
+        
+        # Handle bond types
+        if char == '=':
+            bond_order = 2
+            i += 1
+        elif char == '#':
+            bond_order = 3
+            i += 1
+        elif char == '-':
+            bond_order = 1
+            i += 1
+        elif char == ':':
+            bond_order = 1.5
+            i += 1
+        
+        # Handle branches
+        elif char == '(':
+            if last_atom is not None:
+                atom_stack.append(last_atom)
+            i += 1
+        elif char == ')':
+            if atom_stack:
+                last_atom = atom_stack.pop()
+            i += 1
+        
+        # Handle disconnected structures
+        elif char == '.':
+            last_atom = None
+            i += 1
+        
+        # Handle bracketed atoms
+        elif char == '[':
+            j = i + 1
+            while j < len(smiles) and smiles[j] != ']':
+                j += 1
+            
+            bracket_content = smiles[i+1:j]
+            explicit_h = 0
+            charge = 0
+            
+            # Remove stereochemistry markers first (@@ or @)
+            bracket_content = re.sub(r'@@?', '', bracket_content)
+            
+            # Parse explicit hydrogens
+            h_match = re.search(r'H(\d*)', bracket_content)
+            if h_match:
+                explicit_h = int(h_match.group(1)) if h_match.group(1) else 1
+                bracket_content = re.sub(r'H\d*', '', bracket_content)
+            
+            # Parse charge
+            if '+' in bracket_content:
+                charge_match = re.search(r'\+(\d*)', bracket_content)
+                if charge_match:
+                    charge = int(charge_match.group(1)) if charge_match.group(1) else 1
+                bracket_content = re.sub(r'\+\d*', '', bracket_content)
+            elif '-' in bracket_content:
+                charge_match = re.search(r'-(\d*)', bracket_content)
+                if charge_match:
+                    charge = -int(charge_match.group(1)) if charge_match.group(1) else -1
+                bracket_content = re.sub(r'-\d*', '', bracket_content)
+            
+            # Get element (already removed stereochemistry)
+            element = bracket_content.strip()
+            
+            # Check if element is aromatic (lowercase)
+            is_aromatic = element.islower() if element else False
+            
+            # Add atom
+            atom_index += 1
+            atoms.append((element, explicit_h, charge, is_aromatic))
+            bonds[atom_index] = 0
+            
+            # Add bond from previous atom
+            if last_atom is not None:
+                bonds[last_atom] += bond_order
+                bonds[atom_index] += bond_order
+            
+            last_atom = atom_index
+            bond_order = 1
+            i = j + 1
+        
+        # Handle ring closures
+        elif char.isdigit() or char == '%':
+            if char == '%':
+                i += 1
+                ring_num = int(smiles[i:i+2])
+                i += 2
+            else:
+                ring_num = int(char)
+                i += 1
+            
+            if ring_num in ring_openings:
+                # Close ring
+                opening_atom, opening_bond = ring_openings[ring_num]
+                if last_atom is not None and opening_atom is not None:
+                    # Use the bond order from opening or current, defaulting to single
+                    ring_bond_order = 1  # Ring closures are typically single bonds in aromatic rings
+                    bonds[opening_atom] += ring_bond_order
+                    bonds[last_atom] += ring_bond_order
+                del ring_openings[ring_num]
+            else:
+                # Open ring
+                ring_openings[ring_num] = (last_atom, 1)  # Store with single bond order
+        
+        # Handle organic subset atoms
+        elif char in 'BCNOPSFIbcnops*':
+            element = char
+            is_aromatic = char.islower()
+            
+            # Handle two-letter elements
+            if char == 'B' and i + 1 < len(smiles) and smiles[i + 1] == 'r':
+                element = 'Br'
+                is_aromatic = False
+                i += 1
+            elif char == 'C' and i + 1 < len(smiles) and smiles[i + 1] == 'l':
+                element = 'Cl'
+                is_aromatic = False
+                i += 1
+            elif char == 'C' and i + 1 < len(smiles) and smiles[i + 1] == 'a':
+                element = 'Ca'
+                is_aromatic = False
+                i += 1
+            elif char == 'N' and i + 1 < len(smiles) and smiles[i + 1] == 'a':
+                element = 'Na'
+                is_aromatic = False
+                i += 1
+            
+            # Add atom
+            atom_index += 1
+            atoms.append((element, 0, 0, is_aromatic))
+            bonds[atom_index] = 0
+            
+            # Add bond from previous atom
+            if last_atom is not None:
+                bonds[last_atom] += bond_order
+                bonds[atom_index] += bond_order
+            
+            last_atom = atom_index
+            bond_order = 1
+            i += 1
+        else:
+            i += 1
+    
+    # Calculate total hydrogens
+    total_h = 0
+    
+    for idx, (element, explicit_h, charge, is_aromatic) in enumerate(atoms):
+        # Add explicit hydrogens
+        total_h += explicit_h
+        
+        # Skip wildcards
+        if element == '*':
+            continue
+        
+        # Get valency
+        expected_val = valencies.get(element, 0)
+        
+        # Adjust for charges
+        if element == 'N' and charge > 0:
+            expected_val = 4  # Quaternary nitrogen (non-aromatic)
+        elif element == 'n' and charge > 0:
+            # Aromatic positively charged nitrogen (like in pyridinium)
+            # Still has valency 3 but uses all for bonds
+            expected_val = 3
+        elif element in ['O', 'o'] and charge < 0:
+            expected_val = 1  # Oxide anion
+        
+        # Get total bond order for this atom
+        total_bonds = bonds.get(idx, 0)
+        
+        # Calculate implicit hydrogens
+        if is_aromatic:
+            # For aromatic atoms, we need to account for the delocalized electrons
+            # Aromatic carbons in rings typically have exactly 1 H each
+            # Aromatic nitrogens typically have 0 H
+            if element == 'c':
+                # Aromatic carbon: 
+                # - With 2 explicit bonds (just ring connections) = 1 H
+                # - With 3+ explicit bonds (has substituent) = 0 H
+                implicit_h = 1 if total_bonds == 2 else 0
+            elif element == 'n':
+                # Aromatic nitrogen: uses lone pair for aromaticity, no H
+                implicit_h = 0
+            elif element == 'o':
+                # Aromatic oxygen: rare, typically no H
+                implicit_h = 0
+            elif element == 's':
+                # Aromatic sulfur: typically no H
+                implicit_h = 0
+            elif element == 'p':
+                # Aromatic phosphorus: typically no H
+                implicit_h = 0
+            else:
+                implicit_h = 0
+        else:
+            # Non-aromatic atoms: simple valency calculation
+            # Special handling for oxygen in complex ring systems
+            if element == 'O' and total_bonds == 1 and has_complex_rings:
+                # In complex molecules with numbered rings, single-bonded oxygens
+                # are often part of ring ethers or glycosidic bonds, not free hydroxyls
+                implicit_h = 0
+            else:
+                implicit_h = max(0, expected_val - int(total_bonds))
+        
+        total_h += implicit_h
+    
+    return total_h
