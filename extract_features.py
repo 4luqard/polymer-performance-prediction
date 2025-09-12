@@ -811,3 +811,45 @@ def heteroatom_amount(features: dict) -> int:
         if atom not in ['C', 'c']:
             total += count
     return total
+
+def molecular_weight(features: dict) -> float:
+    """
+    Calculate the molecular weight based on atom counts.
+    
+    Args:
+        features (dict): Dictionary containing atom counts
+        
+    Returns:
+        float: Molecular weight in g/mol
+    """
+    if not features:
+        return 0
+    
+    # Atomic weights in g/mol
+    atomic_weights = {
+        'H': 1.008,
+        'B': 10.81,
+        'C': 12.011,
+        'N': 14.007,
+        'O': 15.999,
+        'F': 18.998,
+        'Na': 22.990,
+        'Si': 28.085,
+        'P': 30.974,
+        'S': 32.06,
+        'Cl': 35.45,
+        'Ca': 40.078,
+        'Ge': 72.63,
+        'Se': 78.96,
+        'Br': 79.904,
+        'Cd': 112.41,
+        'Sn': 118.71,
+        'Te': 127.60,
+    }
+    
+    total_weight = 0
+    for atom, count in features.items():
+        if atom in atomic_weights and count > 0:
+            total_weight += atomic_weights[atom] * count
+    
+    return total_weight
