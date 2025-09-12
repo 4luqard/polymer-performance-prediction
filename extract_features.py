@@ -780,3 +780,34 @@ def hydrogen_amount(smiles: str) -> int:
         total_h += implicit_h
     
     return total_h
+
+def heavy_atom_amount(features: dict) -> int:
+    """
+    Calculate the total number of heavy atoms (all atoms except hydrogen).
+    
+    Args:
+        features: Dictionary with atom counts where keys are atom symbols
+        
+    Returns:
+        Total count of all heavy atoms
+    """
+    # Sum all atoms except hydrogen (H is not in the features dict)
+    return sum(features.values())
+
+def heteroatom_amount(features: dict) -> int:
+    """
+    Calculate the total number of heteroatoms (all atoms except hydrogen and carbon).
+    
+    Args:
+        features: Dictionary with atom counts where keys are atom symbols
+        
+    Returns:
+        Total count of all heteroatoms
+    """
+    # Sum all atoms except hydrogen and carbon
+    total = 0
+    for atom, count in features.items():
+        # Skip carbon (both uppercase and lowercase forms)
+        if atom not in ['C', 'c']:
+            total += count
+    return total
