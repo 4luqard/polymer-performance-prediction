@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-def num_fused_rings(smiles):
+import re
+
+def num_fused_rings(smiles) -> int:
     """
     Count the number of fused rings in a SMILES string.
     
@@ -177,7 +179,7 @@ def num_fused_rings(smiles):
     
     return len(fused_rings)
 
-def num_rings(smiles):
+def num_rings(smiles) -> int:
     """
     Count the number of rings in a SMILES string.
     
@@ -235,7 +237,7 @@ def num_rings(smiles):
     
     return ring_count
 
-def num_tetrahedral_carbon(smiles):
+def num_tetrahedral_carbon(smiles) -> int:
     """
     Count the number of tetrahedral carbon stereocenters in a SMILES string.
     
@@ -271,7 +273,7 @@ def num_tetrahedral_carbon(smiles):
     
     return count
 
-def longest_chain_atom_count(smiles):
+def longest_chain_atom_count(smiles) -> int:
     """
     Find the longest chain of atoms in a SMILES string.
     
@@ -455,5 +457,67 @@ def longest_chain_atom_count(smiles):
 
     return longest
 
-def element_count(smiles, element):
-    pass
+def element_count(smiles, elements) -> dict[str, int]:
+    """Count occurrences of specified elements in a SMILES string.
+    
+    Args:
+        smiles: SMILES string to analyze
+        elements: Either a single element string or list of element strings
+    
+    Returns:
+        Dictionary mapping each element to its count in the SMILES string
+    """
+    if not smiles:
+        # Return zero counts for empty SMILES
+        if isinstance(elements, str):
+            return {elements: 0}
+        else:
+            return {element: 0 for element in elements}
+    
+    # Ensure elements is a list
+    if isinstance(elements, str):
+        elements = [elements]
+    
+    # Initialize count dictionary
+    counts = {element: 0 for element in elements}
+    
+    # Count each element
+    for element in elements:
+        # Handle bracketed elements like [Si], [Te]
+        if element.startswith('[') and element.endswith(']'):
+            # Count bracketed elements directly
+            counts[element] = smiles.count(element)
+        else:
+            # For single-character elements, we need to be more careful
+            # to avoid counting them when they appear in brackets or as part of other elements
+            
+            # Create a temporary string where we remove all bracketed elements
+            temp_smiles = smiles
+            # Remove all bracketed expressions first to avoid counting them
+            temp_smiles = re.sub(r'\[[^\]]*\]', '', temp_smiles)
+            
+            # Now count the element
+            # For elements like C, N, O, we need to count both uppercase and lowercase forms
+            # Uppercase = regular, lowercase = aromatic
+            if element.isupper() and len(element) == 1:
+                # Count both uppercase (regular) and lowercase (aromatic) forms
+                uppercase_count = temp_smiles.count(element)
+                lowercase_count = temp_smiles.count(element.lower())
+                
+                # Special handling to avoid counting multi-character elements
+                if element == 'C':
+                    # Subtract Cl occurrences from C count
+                    uppercase_count -= temp_smiles.count('Cl')
+                elif element == 'S':
+                    # Subtract Se occurrences from S count  
+                    uppercase_count -= temp_smiles.count('Se')
+                elif element == 'B':
+                    # Subtract Br occurrences from B count
+                    uppercase_count -= temp_smiles.count('Br')
+                
+                counts[element] = uppercase_count + lowercase_count
+            else:
+                # For multi-character elements, just count them directly
+                counts[element] = temp_smiles.count(element)
+    
+    return counts

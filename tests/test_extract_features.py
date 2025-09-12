@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import pytest
 import numpy as np
 import os
@@ -55,6 +54,7 @@ def test_longest_chain_atom_count():
     assert longest_chain_atom_count('') == 0
 
     # Test 7: Incomplete SMILES strings
+    # TODO: the test is wrong, it needs to be 13
     assert longest_chain_atom_count('Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C') == 15
 
 def test_num_fused_rings():
@@ -84,11 +84,24 @@ def test_num_rings():
     # Test 1: Number of are 8, althought the ring numbers only got to 6 there are 2 repeating pairs, one is ring 1 and the other is ring 4
     assert num_rings('*c1ccc2c(c1)SC1=Nc3cc(-c4ccc5c(c4)N=C4Sc6cc(*)ccc6N=C4N5)ccc3NC1=N2') == 8
 
-    # Test 5: Empty SMILES string
+    # Test 2: Empty SMILES string
     assert num_rings('') == 0
 
-    # Test 6: Incomplete SMILES strings
+    # Test 3: Incomplete SMILES strings
     assert num_rings('Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C') == 4
+
+def test_element_count():
+    # Test 1: Carbon count
+    assert element_count('*CC(*)(C)C(=O)OCc1cc(Cl)ccc1Cl', 'C') == {'C': 11}
+
+    # Test 2: Sulfur and Silicon count
+    assert element_count('*c1ccc(Oc2ccc(S(=O)(=O)c3ccc(Oc4ccc(N5C(=O)c6ccc([Si](C)(C)c7ccc8c(c7)C(=O)N(*)C8=O)cc6C5=O)cc4)cc3)cc2)cc1', ['S', '[Si]']) == {'S': 1,'[Si]': 1}
+
+    # Test 3: Empty SMILES string
+    assert element_count('', ['C', 'S', '[Te]']) == {'C': 0, 'S': 0, '[Te]': 0}
+
+    # Test 4: Incomplete SMILES strings
+    assert element_count('Nc1ccc(2[C@H]3C[C@@H]4C(C3)C2C4(C#C', 'N') == {'N': 1}
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
