@@ -288,14 +288,12 @@ def longest_chain_atom_count(smiles):
         elif char.isdigit():
             ring_num = int(char)
             if ring_num in ring_closures:
-                # Close the ring
                 bonds.append((ring_closures[ring_num], last_atom_idx))
                 del ring_closures[ring_num]
             else:
-                # Open a ring
                 ring_closures[ring_num] = last_atom_idx
             i += 1
-            
+
         # Handle two-digit ring closures (%10, %11, etc.)
         elif char == '%':
             if i + 2 < len(smiles) and smiles[i+1:i+3].isdigit():
@@ -358,38 +356,46 @@ def longest_chain_atom_count(smiles):
             adj[a].add(b)
             adj[b].add(a)
     
-    # Find longest path using DFS
-    def dfs_longest_path(start, visited):
-        """DFS to find longest path from start node."""
-        visited = visited | {start}
-        max_path = 0
-        
-        for neighbor in adj[start]:
-            if neighbor not in visited:
-                path_len = dfs_longest_path(neighbor, visited)
-                max_path = max(max_path, path_len)
-        
-        return max_path + 1
-    
-    # Try from all nodes and find the maximum
+    # Precompute distances via BFS for pruning
+    from collections import deque
+
+    def bfs_distances(start):
+        dist = {start: 0}
+        q = deque([start])
+        while q:
+            node = q.popleft()
+            for neigh in adj[node]:
+                if neigh not in dist:
+                    dist[neigh] = dist[node] + 1
+                    q.append(neigh)
+        return dist
+
+    dist_cache = {}
+
+    start_nodes = [i for i in range(n) if len(adj[i]) <= 1]
+    if not start_nodes:
+        start_nodes = list(range(min(n, 10)))
+
     longest = 0
-    
-    # For efficiency, start with leaf nodes (degree 1) as they're likely endpoints
-    leaf_nodes = [i for i in range(n) if len(adj[i]) <= 1]
-    
-    # If there are leaf nodes, check from them first
-    if leaf_nodes:
-        for start in leaf_nodes:
-            path_len = dfs_longest_path(start, frozenset())
-            longest = max(longest, path_len)
-    
-    # For graphs without clear leaves or to ensure completeness,
-    # sample a few more starting points
-    if longest == 0 or n <= 20:  # For small molecules, check all
-        for start in range(min(n, 10)):  # Limit for large molecules
-            path_len = dfs_longest_path(start, frozenset())
-            longest = max(longest, path_len)
-    
+    for start in start_nodes:
+        dist_cache[start] = bfs_distances(start)
+        if dist_cache[start]:
+            longest = max(longest, max(dist_cache[start].values()) + 1)
+
+    stack = [(s, 1, 1 << s) for s in start_nodes]
+    while stack:
+        node, length, visited = stack.pop()
+        if length > longest:
+            longest = length
+
+        remaining = n - bin(visited).count('1')
+        if length + remaining <= longest:
+            continue
+
+        for neigh in adj[node]:
+            if not (visited & (1 << neigh)):
+                stack.append((neigh, length + 1, visited | (1 << neigh)))
+
     return longest
 
 
