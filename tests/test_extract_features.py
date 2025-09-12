@@ -150,5 +150,15 @@ def test_molecular_weight():
     # Empty SMILES string
     assert molecular_weight({'C': 0, 'N': 0, 'O': 0}) == 0
 
+def test_vdw_volume():
+    # Sum of every atom's van der Waals volume in centimeters cuber per mole
+    assert np.isclose(vdw_volume({'C': 1, 'N': 4, 'O': 3, 'H': 9}), 115.815, atol=1e-2)
+
+    # Empty dict
+    assert vdw_volume({}) == 0
+
+    # Empty SMILES string
+    assert vdw_volume({'C': 0, 'N': 0, 'O': 0}) == 0
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
