@@ -35,11 +35,263 @@
 
 
 
+
+
 ## Feature Importance (SHAP-based)
 
-*Last updated: 2025-09-12 13:02:05*
+*Last updated: 2025-09-12 13:43:04*
 
 ### Tg
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| num_rings | 23.9287 |
+| avg_bond_length | 20.7151 |
+| main_branch_atom_ratio | 12.2463 |
+| rg_estimate | 11.3072 |
+| H | 11.2723 |
+| molecular_complexity | 10.4754 |
+| num_fused_rings | 10.3891 |
+| has_polymer_end_branch | 8.2484 |
+| O | 7.1692 |
+| molecular_weight | 5.6806 |
+| has_bridge | 5.2521 |
+| has_ether | 4.9454 |
+| P | 4.4768 |
+| num_branches | 4.2931 |
+| has_amide | 4.2490 |
+| density_estimate | 4.0585 |
+| num_double_bonds | 3.9906 |
+| vdw_volume | 3.9018 |
+| chain_length_estimate | 3.8677 |
+| main_branch_atoms | 3.7111 |
+
+### FFV
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| num_rings | 0.0012 |
+| O | 0.0011 |
+| avg_bond_length | 0.0010 |
+| has_polymer_end_branch | 0.0008 |
+| density_estimate | 0.0007 |
+| N | 0.0007 |
+| c | 0.0005 |
+| has_carbonyl | 0.0005 |
+| has_amine | 0.0004 |
+| molecular_complexity | 0.0003 |
+| num_branches | 0.0003 |
+| C | 0.0003 |
+| num_single_bonds | 0.0003 |
+| rg_estimate | 0.0003 |
+| main_branch_atom_ratio | 0.0002 |
+| S | 0.0002 |
+| num_triple_bonds | 0.0002 |
+| has_amide | 0.0002 |
+| chain_length_estimate | 0.0002 |
+| has_ester | 0.0002 |
+
+### Tc
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| H | 0.0081 |
+| density_estimate | 0.0043 |
+| molecular_complexity | 0.0022 |
+| main_branch_atom_ratio | 0.0013 |
+| chain_length_estimate | 0.0013 |
+| num_branches | 0.0012 |
+| N | 0.0012 |
+| vdw_volume | 0.0010 |
+| rg_estimate | 0.0010 |
+| avg_bond_length | 0.0009 |
+| C | 0.0009 |
+| has_polymer_end_branch | 0.0007 |
+| has_amide | 0.0005 |
+| length | 0.0005 |
+| molecular_weight | 0.0004 |
+| heteroatom_amount | 0.0004 |
+| has_phenyl | 0.0004 |
+| heavy_atom_amount | 0.0004 |
+| O | 0.0003 |
+| new_sim | 0.0003 |
+
+### Density
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| density_estimate | 0.1003 |
+| new_sim | 0.0173 |
+| avg_bond_length | 0.0122 |
+| has_polymer_end_branch | 0.0054 |
+| H | 0.0053 |
+| O | 0.0048 |
+| chain_length_estimate | 0.0042 |
+| num_rings | 0.0040 |
+| main_branch_atom_ratio | 0.0037 |
+| rg_estimate | 0.0037 |
+| num_branches | 0.0035 |
+| length | 0.0034 |
+| molecular_weight | 0.0030 |
+| N | 0.0025 |
+| C | 0.0022 |
+| num_double_bonds | 0.0020 |
+| vdw_volume | 0.0019 |
+| heavy_atom_amount | 0.0019 |
+| num_fused_rings | 0.0018 |
+| has_ester | 0.0017 |
+
+### Rg
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| has_polymer_end_branch | 1.2086 |
+| rg_estimate | 0.6839 |
+| main_branch_atom_ratio | 0.6085 |
+| density_estimate | 0.5588 |
+| has_ester | 0.4561 |
+| has_carbonyl | 0.2608 |
+| molecular_weight | 0.2582 |
+| H | 0.2344 |
+| N | 0.1858 |
+| vdw_volume | 0.1827 |
+| num_double_bonds | 0.1627 |
+| chain_length_estimate | 0.1612 |
+| has_phenyl | 0.1572 |
+| avg_bond_length | 0.1427 |
+| C | 0.1337 |
+| length | 0.1318 |
+| has_methyl | 0.1220 |
+| heavy_atom_amount | 0.1124 |
+| heteroatom_amount | 0.0929 |
+| main_branch_atoms | 0.0874 |
+
+## Tg
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| num_rings | 23.9287 |
+| avg_bond_length | 20.7151 |
+| main_branch_atom_ratio | 12.2463 |
+| rg_estimate | 11.3072 |
+| H | 11.2723 |
+| molecular_complexity | 10.4754 |
+| num_fused_rings | 10.3891 |
+| has_polymer_end_branch | 8.2484 |
+| O | 7.1692 |
+| molecular_weight | 5.6806 |
+| has_bridge | 5.2521 |
+| has_ether | 4.9454 |
+| P | 4.4768 |
+| num_branches | 4.2931 |
+| has_amide | 4.2490 |
+| density_estimate | 4.0585 |
+| num_double_bonds | 3.9906 |
+| vdw_volume | 3.9018 |
+| chain_length_estimate | 3.8677 |
+| main_branch_atoms | 3.7111 |
+
+### FFV
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| num_rings | 0.0012 |
+| O | 0.0011 |
+| avg_bond_length | 0.0010 |
+| has_polymer_end_branch | 0.0008 |
+| density_estimate | 0.0007 |
+| N | 0.0007 |
+| c | 0.0005 |
+| has_carbonyl | 0.0005 |
+| has_amine | 0.0004 |
+| molecular_complexity | 0.0003 |
+| num_branches | 0.0003 |
+| C | 0.0003 |
+| num_single_bonds | 0.0003 |
+| rg_estimate | 0.0003 |
+| main_branch_atom_ratio | 0.0002 |
+| S | 0.0002 |
+| num_triple_bonds | 0.0002 |
+| has_amide | 0.0002 |
+| chain_length_estimate | 0.0002 |
+| has_ester | 0.0002 |
+
+### Tc
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| H | 0.0081 |
+| density_estimate | 0.0043 |
+| molecular_complexity | 0.0022 |
+| main_branch_atom_ratio | 0.0013 |
+| chain_length_estimate | 0.0013 |
+| num_branches | 0.0012 |
+| N | 0.0012 |
+| vdw_volume | 0.0010 |
+| rg_estimate | 0.0010 |
+| avg_bond_length | 0.0009 |
+| C | 0.0009 |
+| has_polymer_end_branch | 0.0007 |
+| has_amide | 0.0005 |
+| length | 0.0005 |
+| molecular_weight | 0.0004 |
+| heteroatom_amount | 0.0004 |
+| has_phenyl | 0.0004 |
+| heavy_atom_amount | 0.0004 |
+| O | 0.0003 |
+| new_sim | 0.0003 |
+
+### Density
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| density_estimate | 0.1003 |
+| new_sim | 0.0173 |
+| avg_bond_length | 0.0122 |
+| has_polymer_end_branch | 0.0054 |
+| H | 0.0053 |
+| O | 0.0048 |
+| chain_length_estimate | 0.0042 |
+| num_rings | 0.0040 |
+| main_branch_atom_ratio | 0.0037 |
+| rg_estimate | 0.0037 |
+| num_branches | 0.0035 |
+| length | 0.0034 |
+| molecular_weight | 0.0030 |
+| N | 0.0025 |
+| C | 0.0022 |
+| num_double_bonds | 0.0020 |
+| vdw_volume | 0.0019 |
+| heavy_atom_amount | 0.0019 |
+| num_fused_rings | 0.0018 |
+| has_ester | 0.0017 |
+
+### Rg
+
+| Feature | SHAP Importance |
+|---------|----------------|
+| has_polymer_end_branch | 1.2086 |
+| rg_estimate | 0.6839 |
+| main_branch_atom_ratio | 0.6085 |
+| density_estimate | 0.5588 |
+| has_ester | 0.4561 |
+| has_carbonyl | 0.2608 |
+| molecular_weight | 0.2582 |
+| H | 0.2344 |
+| N | 0.1858 |
+| vdw_volume | 0.1827 |
+| num_double_bonds | 0.1627 |
+| chain_length_estimate | 0.1612 |
+| has_phenyl | 0.1572 |
+| avg_bond_length | 0.1427 |
+| C | 0.1337 |
+| length | 0.1318 |
+| has_methyl | 0.1220 |
+| heavy_atom_amount | 0.1124 |
+| heteroatom_amount | 0.0929 |
+| main_branch_atoms | 0.0874 |
+
+## Tg
 
 | Feature | SHAP Importance |
 |---------|----------------|
