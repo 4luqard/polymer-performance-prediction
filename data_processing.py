@@ -289,39 +289,45 @@ def extract_molecular_features(smiles, rpt):
     features = {}
     
     # Basic string features
-    features['length'] = len(smiles)
+    features['length'] = len(smiles) # No units
 
     # Number of atoms on the longest chain of atoms
-    features['longest_chain_atom_count'] = longest_chain_atom_count(smiles)
+    # features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
 
-    # Number of rings fused together
-    features['num_fused_rings'] = num_fused_rings(smiles)
+    # Ring features
+    features['num_fused_rings'] = num_fused_rings(smiles) # No units
+    features['num_rings'] = num_rings(smiles) # No units
+
+    # Element count features, excluding Hydrogen
+    elements = ['', '']
+    for element in elements:
+        features[element] = element_count(smiles, element)
 
     # Count different atoms (case-sensitive for aromatic vs non-aromatic)
     # First count two-letter atoms to avoid double counting
-    features['num_Cl'] = len(re.findall(r'Cl', smiles))
-    features['num_Br'] = len(re.findall(r'Br', smiles))
+    # features['num_Cl'] = len(re.findall(r'Cl', smiles))
+    # features['num_Br'] = len(re.findall(r'Br', smiles))
     # features['num_Si'] = len(re.findall(r'[Si]', smiles))
     # features['num_Npos'] = len(re.findall(r'[N+]', smiles))
     # features['num_Oneg'] = len(re.findall(r'[O-]', smiles))
     # features['num_nh'] = len(re.findall(r'[nH]', smiles))
     
     # Remove two-letter atoms before counting single letters
-    smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '') #.replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
+    # smiles_no_cl_br = smiles.replace('Cl', '').replace('Br', '') #.replace('[Si]', '').replace('[nH]', '') #.replace('[O-]', '').replace('[N+]', '')
 
-    features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
+    # features['num_C'] = len(re.findall(r'C', smiles_no_cl_br))
     # features['num_CC'] = len(re.findall(r'CC', smiles_no_cl_br))
     # features['num_cc'] = len(re.findall(r'cc', smiles_no_cl_br))
-    features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
-    features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
-    features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
-    features['num_N'] = len(re.findall(r'N', smiles_no_cl_br))
-    features['num_n'] = len(re.findall(r'n', smiles_no_cl_br))  # aromatic nitrogen
-    features['num_S'] = len(re.findall(r'S', smiles_no_cl_br))
-    features['num_s'] = len(re.findall(r's', smiles_no_cl_br))  # aromatic sulfur
-    features['num_F'] = smiles_no_cl_br.count('F')
-    features['num_I'] = smiles_no_cl_br.count('I')
-    features['num_P'] = smiles_no_cl_br.count('P')
+    # features['num_c'] = len(re.findall(r'c', smiles_no_cl_br))  # aromatic carbon
+    # features['num_O'] = len(re.findall(r'O', smiles_no_cl_br))
+    # features['num_o'] = len(re.findall(r'o', smiles_no_cl_br))  # aromatic oxygen
+    # features['num_N'] = len(re.findall(r'N', smiles_no_cl_br))
+    # features['num_n'] = len(re.findall(r'n', smiles_no_cl_br))  # aromatic nitrogen
+    # features['num_S'] = len(re.findall(r'S', smiles_no_cl_br))
+    # features['num_s'] = len(re.findall(r's', smiles_no_cl_br))  # aromatic sulfur
+    # features['num_F'] = smiles_no_cl_br.count('F')
+    # features['num_I'] = smiles_no_cl_br.count('I')
+    # features['num_P'] = smiles_no_cl_br.count('P')
 
     # Stereochemistry
     features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
@@ -333,12 +339,6 @@ def extract_molecular_features(smiles, rpt):
     features['num_aromatic_bonds'] = smiles.count(':')
     
     # Count structural features
-    # Count unique ring identifiers (each ring is closed once)
-    ring_closures = set()
-    for i in range(1, 10):
-        if str(i) in smiles:
-            ring_closures.add(str(i))
-    features['num_rings'] = len(ring_closures)
     features['num_branches'] = smiles.count('(')
 
     # Polymer-specific features
@@ -360,121 +360,121 @@ def extract_molecular_features(smiles, rpt):
     # features['num_aromatic_atoms'] = features['num_c'] + features['num_n'] + features['num_o'] + features['num_s']
     
     # Calculate derived features
-    features['heavy_atom_count'] = (features['num_C'] + features['num_c'] + 
-                                   features['num_O'] + features['num_o'] + 
-                                   features['num_N'] + features['num_n'] + 
-                                   features['num_S'] + features['num_s'] + 
-                                   features['num_F'] + features['num_Cl'] + 
-                                   features['num_Br'] + features['num_I'] + 
-                                   features['num_P'])
-    
-    features['heteroatom_count'] = (features['num_O'] + features['num_o'] + 
-                                    features['num_N'] + features['num_n'] + 
-                                    features['num_S'] + features['num_s'] + 
-                                    features['num_F'] + features['num_Cl'] + 
-                                    features['num_Br'] + features['num_I'] + 
-                                    features['num_P'])
-    
+    # features['heavy_atom_count'] = (features['num_C'] + features['num_c'] +
+    #                                features['num_O'] + features['num_o'] +
+    #                                features['num_N'] + features['num_n'] +
+    #                                features['num_S'] + features['num_s'] +
+    #                                features['num_F'] + features['num_Cl'] +
+    #                                features['num_Br'] + features['num_I'] +
+    #                                features['num_P'])
+
+    # features['heteroatom_count'] = (features['num_O'] + features['num_o'] +
+    #                                 features['num_N'] + features['num_n'] +
+    #                                 features['num_S'] + features['num_s'] +
+    #                                 features['num_F'] + features['num_Cl'] +
+    #                                 features['num_Br'] + features['num_I'] +
+    #                                 features['num_P'])
+
     # features['ion_count'] = (features['num_Si'] + features['num_Oneg'] +
     #                         features['num_Npos'])
 
     
-    features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
-    
+    # features['heteroatom_ratio'] = features['heteroatom_count'] / max(features['heavy_atom_count'], 1)
+
     # features['carbon_percent'] = (features['num_C'] + features['num_c']) / (features['heavy_atom_count'] + features['ion_count'])
     # features['aromatic_ratio'] = features['num_aromatic_atoms'] / (features['heavy_atom_count'] + features['ion_count'])
     
     # Flexibility indicators
     features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
-    features['flexibility_score'] = features['rotatable_bond_estimate'] / max(features['heavy_atom_count'], 1)
-    
+    # features['flexibility_score'] = features['rotatable_bond_estimate'] / max(features['heavy_atom_count'], 1)
+
     # Size and complexity
     features['molecular_complexity'] = (features['num_rings'] + features['num_branches'] + 
                                        features['num_tetrahedral_carbon'])
     
     # Molecular weight estimation (for Tg prediction based on Newton's second law)
     # Atomic weights with 0.1 significance as requested
-    atomic_weights = {
-        'C': 12.0, 'c': 12.0,  # Carbon
-        'O': 16.0, 'o': 16.0,  # Oxygen
-        'N': 14.0, 'n': 14.0,  # Nitrogen
-        'S': 32.1, 's': 32.1,  # Sulfur
-        'F': 19.0,             # Fluorine
-        'Cl': 35.5,            # Chlorine
-        'Br': 79.9,            # Bromine
-        'I': 126.9,            # Iodine
-        'P': 31.0,             # Phosphorus
-        'H': 1.0               # Hydrogen (implicit)
-    }
-    
-    # Calculate molecular weight estimate
-    mol_weight = 0.0
-    mol_weight += features['num_C'] * atomic_weights['C']
-    mol_weight += features['num_c'] * atomic_weights['c']
-    mol_weight += features['num_O'] * atomic_weights['O']
-    mol_weight += features['num_o'] * atomic_weights['o']
-    mol_weight += features['num_N'] * atomic_weights['N']
-    mol_weight += features['num_n'] * atomic_weights['n']
-    mol_weight += features['num_S'] * atomic_weights['S']
-    mol_weight += features['num_s'] * atomic_weights['s']
-    mol_weight += features['num_F'] * atomic_weights['F']
-    mol_weight += features['num_Cl'] * atomic_weights['Cl']
-    mol_weight += features['num_Br'] * atomic_weights['Br']
-    mol_weight += features['num_I'] * atomic_weights['I']
-    mol_weight += features['num_P'] * atomic_weights['P']
-    
-    # Round to 0.1 significance
-    features['molecular_weight'] = round(mol_weight, 3)
-    
+    # atomic_weights = {
+    #     'C': 12.0, 'c': 12.0,  # Carbon
+    #     'O': 16.0, 'o': 16.0,  # Oxygen
+    #     'N': 14.0, 'n': 14.0,  # Nitrogen
+    #     'S': 32.1, 's': 32.1,  # Sulfur
+    #     'F': 19.0,             # Fluorine
+    #     'Cl': 35.5,            # Chlorine
+    #     'Br': 79.9,            # Bromine
+    #     'I': 126.9,            # Iodine
+    #     'P': 31.0,             # Phosphorus
+    #     'H': 1.0               # Hydrogen (implicit)
+    # }
+
+    # # Calculate molecular weight estimate
+    # mol_weight = 0.0
+    # mol_weight += features['num_C'] * atomic_weights['C']
+    # mol_weight += features['num_c'] * atomic_weights['c']
+    # mol_weight += features['num_O'] * atomic_weights['O']
+    # mol_weight += features['num_o'] * atomic_weights['o']
+    # mol_weight += features['num_N'] * atomic_weights['N']
+    # mol_weight += features['num_n'] * atomic_weights['n']
+    # mol_weight += features['num_S'] * atomic_weights['S']
+    # mol_weight += features['num_s'] * atomic_weights['s']
+    # mol_weight += features['num_F'] * atomic_weights['F']
+    # mol_weight += features['num_Cl'] * atomic_weights['Cl']
+    # mol_weight += features['num_Br'] * atomic_weights['Br']
+    # mol_weight += features['num_I'] * atomic_weights['I']
+    # mol_weight += features['num_P'] * atomic_weights['P']
+
+    # # Round to 0.1 significance
+    # features['molecular_weight'] = round(mol_weight, 3)
+
     # Van der Waals volume calculation (heavy atoms only, no H estimation)
     # Van der Waals volumes in Angstrom^3 (Bondi, 1964)
-    vdw_volumes = {
-        'C': 20.58, 'c': 20.58,  # Carbon (both aliphatic and aromatic)
-        'N': 15.60, 'n': 15.60,  # Nitrogen
-        'O': 14.71, 'o': 14.71,  # Oxygen  
-        'S': 24.43, 's': 24.43,  # Sulfur
-        'F': 13.31,              # Fluorine
-        'Cl': 22.45,             # Chlorine
-        'Br': 26.52,             # Bromine
-        'I': 32.52,              # Iodine
-        'P': 24.43               # Phosphorus
-    }
-    
-    # Calculate total Van der Waals volume
-    vdw_volume = 0.0
-    vdw_volume += features['num_C'] * vdw_volumes['C']
-    vdw_volume += features['num_c'] * vdw_volumes['c']
-    vdw_volume += features['num_O'] * vdw_volumes['O']
-    vdw_volume += features['num_o'] * vdw_volumes['o']
-    vdw_volume += features['num_N'] * vdw_volumes['N']
-    vdw_volume += features['num_n'] * vdw_volumes['n']
-    vdw_volume += features['num_S'] * vdw_volumes['S']
-    vdw_volume += features['num_s'] * vdw_volumes['s']
-    vdw_volume += features['num_F'] * vdw_volumes['F']
-    vdw_volume += features['num_Cl'] * vdw_volumes['Cl']
-    vdw_volume += features['num_Br'] * vdw_volumes['Br']
-    vdw_volume += features['num_I'] * vdw_volumes['I']
-    vdw_volume += features['num_P'] * vdw_volumes['P']
-    
-    # Round to 0.1 significance  
-    features['vdw_volume'] = round(vdw_volume, 3)
-    
+    # vdw_volumes = {
+    #     'C': 20.58, 'c': 20.58,  # Carbon (both aliphatic and aromatic)
+    #     'N': 15.60, 'n': 15.60,  # Nitrogen
+    #     'O': 14.71, 'o': 14.71,  # Oxygen
+    #     'S': 24.43, 's': 24.43,  # Sulfur
+    #     'F': 13.31,              # Fluorine
+    #     'Cl': 22.45,             # Chlorine
+    #     'Br': 26.52,             # Bromine
+    #     'I': 32.52,              # Iodine
+    #     'P': 24.43               # Phosphorus
+    # }
+
+    # # Calculate total Van der Waals volume
+    # vdw_volume = 0.0
+    # vdw_volume += features['num_C'] * vdw_volumes['C']
+    # vdw_volume += features['num_c'] * vdw_volumes['c']
+    # vdw_volume += features['num_O'] * vdw_volumes['O']
+    # vdw_volume += features['num_o'] * vdw_volumes['o']
+    # vdw_volume += features['num_N'] * vdw_volumes['N']
+    # vdw_volume += features['num_n'] * vdw_volumes['n']
+    # vdw_volume += features['num_S'] * vdw_volumes['S']
+    # vdw_volume += features['num_s'] * vdw_volumes['s']
+    # vdw_volume += features['num_F'] * vdw_volumes['F']
+    # vdw_volume += features['num_Cl'] * vdw_volumes['Cl']
+    # vdw_volume += features['num_Br'] * vdw_volumes['Br']
+    # vdw_volume += features['num_I'] * vdw_volumes['I']
+    # vdw_volume += features['num_P'] * vdw_volumes['P']
+
+    # # Round to 0.1 significance
+    # features['vdw_volume'] = round(vdw_volume, 3)
+
     # Density estimate: molecular weight / volume
     # Convert from g/mol/Å³ to g/cm³
     # 1 Å³ = 10⁻²⁴ cm³, 1 mol = 6.022 × 10²³ molecules
     # Conversion factor: 10²⁴ / 6.022 × 10²³ = 1.66054
-    if vdw_volume > 0:
-        density_g_mol_A3 = mol_weight / vdw_volume
-        features['density_estimate'] = round(density_g_mol_A3 * 1.66054, 3)
-        
-        # FFV estimation using original density units
-        # FFV = (V - 1.3 × Vw) / V where V = 1/density in Å³/(g/mol)
-        specific_volume = 1.0 / density_g_mol_A3  # Å³/(g/mol)
-        features['ffv_estimate'] = round((specific_volume - 1.3 * vdw_volume) / specific_volume, 3)
-    else:
-        features['density_estimate'] = 0.0
-        features['ffv_estimate'] = 0.0
-    
+    # if vdw_volume > 0:
+    #     density_g_mol_A3 = mol_weight / vdw_volume
+    #     features['density_estimate'] = round(density_g_mol_A3 * 1.66054, 3)
+
+    #     # FFV estimation using original density units
+    #     # FFV = (V - 1.3 × Vw) / V where V = 1/density in Å³/(g/mol)
+    #     specific_volume = 1.0 / density_g_mol_A3  # Å³/(g/mol)
+    #     features['ffv_estimate'] = round((specific_volume - 1.3 * vdw_volume) / specific_volume, 3)
+    # else:
+    #     features['density_estimate'] = 0.0
+    #     features['ffv_estimate'] = 0.0
+
     # Additional polymer-specific patterns
     # Phenyl: aromatic 6-membered ring patterns
     features['has_phenyl'] = int(bool(re.search(r'c1ccccc1|c1ccc.*cc1', smiles)))
@@ -494,8 +494,8 @@ def extract_molecular_features(smiles, rpt):
     features['main_branch_atoms'] = calculate_main_branch_atoms(smiles)
     
     # Main branch atom ratio (main branch atoms / total heavy atoms)
-    features['main_branch_atom_ratio'] = round(features['main_branch_atoms'] / max(features['heavy_atom_count'], 1), 3)
-    
+    # features['main_branch_atom_ratio'] = round(features['main_branch_atoms'] / max(features['heavy_atom_count'], 1), 3)
+
     # Backbone bonds count
     features['backbone_bonds'] = calculate_backbone_bonds(smiles)
     
