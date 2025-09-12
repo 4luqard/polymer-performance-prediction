@@ -140,5 +140,15 @@ def test_heteroatom_amount():
     # Empty SMILES string
     assert heteroatom_amount({'C': 0, 'N': 0, 'O': 0}) == 0
 
+def test_molecular_weight():
+    # Sum of every atom's atomic weight
+    assert np.isclose(molecular_weight({'C': 1, 'N': 4, 'O': 3, 'H': 9}), 125.108, atol=1e-2)
+
+    # Empty dict
+    assert molecular_weight({}) == 0
+
+    # Empty SMILES string
+    assert molecular_weight({'C': 0, 'N': 0, 'O': 0}) == 0
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
