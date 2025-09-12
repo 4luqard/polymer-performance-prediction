@@ -287,7 +287,10 @@ def calculate_average_bond_length(smiles):
 def extract_molecular_features(smiles, rpt):
     """Extract features from SMILES string without external libraries"""
     features = {}
-    
+    elements = ['B', 'C', 'N', 'O', 'F', '[Na]', '[Si]', 'P', 'S',
+                'Cl', '[Ca]', '[Ge]', '[Se]', 'Br', '[Cd]', '[Sn]', '[Te]']
+    aromatic_atoms = ['b', 'c', 'n', 'o', 'p', 's']
+
     # Basic string features
     features['length'] = len(smiles) # No units
 
@@ -298,10 +301,8 @@ def extract_molecular_features(smiles, rpt):
     features['num_fused_rings'] = num_fused_rings(smiles) # No units
     features['num_rings'] = num_rings(smiles) # No units
 
-    # Element count features, excluding Hydrogen
-    elements = ['', '']
-    for element in elements:
-        features[element] = element_count(smiles, element)
+    # Atom count features, excluding Hydrogen
+    features |= element_count(smiles, elements)
 
     # Count different atoms (case-sensitive for aromatic vs non-aromatic)
     # First count two-letter atoms to avoid double counting
