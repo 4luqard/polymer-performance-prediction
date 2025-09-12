@@ -853,3 +853,50 @@ def molecular_weight(features: dict) -> float:
             total_weight += atomic_weights[atom] * count
     
     return total_weight
+
+def vdw_volume(features: dict) -> float:
+    """
+    Calculate the van der Waals volume based on atom counts.
+    
+    Args:
+        features (dict): Dictionary containing atom counts
+        
+    Returns:
+        float: van der Waals volume in cm³/mol
+    """
+    if not features:
+        return 0
+    
+    # van der Waals volumes in Å³ (calculated from VdW radii using V = 4/3 * π * r³)
+    # Radii from Bondi (1964) and other standard references
+    vdw_volumes_A3 = {
+        'H': 7.24,    # radius 1.20 Å
+        'B': 23.91,   # radius 1.79 Å  
+        'C': 20.58,   # radius 1.70 Å (slightly adjusted)
+        'N': 15.59,   # radius 1.55 Å
+        'O': 14.74,   # radius 1.52 Å
+        'F': 13.94,   # radius 1.47 Å
+        'Na': 51.38,  # radius 2.27 Å
+        'Si': 38.79,  # radius 2.10 Å
+        'P': 24.43,   # radius 1.80 Å
+        'S': 24.43,   # radius 1.80 Å
+        'Cl': 22.45,  # radius 1.75 Å
+        'Ca': 55.85,  # radius 2.31 Å
+        'Ge': 31.15,  # radius 1.95 Å
+        'Se': 28.73,  # radius 1.90 Å
+        'Br': 26.52,  # radius 1.85 Å
+        'Cd': 34.53,  # radius 2.01 Å
+        'Sn': 42.8,   # radius 2.17 Å
+        'Te': 36.62,  # radius 2.06 Å
+    }
+    
+    # Conversion factor from Å³ to cm³/mol
+    # 1 Å³ × (10^-24 cm³/Å³) × (6.022 × 10^23 molecules/mol) = 0.6022 cm³/mol
+    conversion_factor = 0.6022
+    
+    total_volume = 0
+    for atom, count in features.items():
+        if atom in vdw_volumes_A3 and count > 0:
+            total_volume += vdw_volumes_A3[atom] * count * conversion_factor
+    
+    return total_volume
