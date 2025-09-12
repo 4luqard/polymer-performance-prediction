@@ -120,5 +120,25 @@ def test_hydrogen_amount():
     # Empty SMILES strings
     assert hydrogen_amount('') == 0
 
+def test_heavy_atom_amount():
+    # Sum of every atom except hydrogen
+    assert heavy_atom_amount({'C': 1, 'N': 4, 'O': 3}) == 8
+
+    # Empty dict
+    assert heavy_atom_amount({}) == 0
+
+    # Empty SMILES string
+    assert heavy_atom_amount({'C': 0, 'N': 0, 'O': 0}) == 0
+
+def test_heteroatom_amount():
+    # Sum of every atom except hydrogen and carbon
+    assert heteroatom_amount({'C': 1, 'N': 4, 'O': 3}) == 7
+
+    # Empty dict
+    assert heteroatom_amount({}) == 0
+
+    # Empty SMILES string
+    assert heteroatom_amount({'C': 0, 'N': 0, 'O': 0}) == 0
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
