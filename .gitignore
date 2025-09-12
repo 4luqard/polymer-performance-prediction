@@ -222,3 +222,6 @@ data/
 *.pkl
 residual_plots/
 residual_results/
+
+# notebooks
+notebooks/

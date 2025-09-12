@@ -455,4 +455,5 @@ def longest_chain_atom_count(smiles):
 
     return longest
 
-
+def element_count(smiles, element):
+    pass
