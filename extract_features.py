@@ -1,4 +1,3 @@
-# %% [code]
 #!/usr/bin/env python3
 
 def num_fused_rings(smiles):
@@ -177,6 +176,64 @@ def num_fused_rings(smiles):
                 fused_rings.add(ring2['id'])
     
     return len(fused_rings)
+
+def num_rings(smiles):
+    """
+    Count the number of rings in a SMILES string.
+    
+    In SMILES, rings are denoted by:
+    - Single digits 1-9 (each pair forms a ring)
+    - Percent notation %10, %11, etc. for rings > 9
+    
+    Args:
+        smiles: SMILES string representation
+        
+    Returns:
+        Number of rings in the structure
+    """
+    if not smiles:
+        return 0
+    
+    ring_markers = {}
+    ring_count = 0
+    i = 0
+    
+    while i < len(smiles):
+        char = smiles[i]
+        
+        # Check for single digit ring markers (1-9)
+        if char.isdigit() and char != '0':
+            if char in ring_markers:
+                # Found closing marker - ring is complete
+                ring_count += 1
+                del ring_markers[char]
+            else:
+                # Found opening marker
+                ring_markers[char] = i
+            i += 1
+            
+        # Check for percent notation (%10, %11, etc.)
+        elif char == '%' and i + 2 < len(smiles):
+            # Try to parse two-digit number after %
+            if smiles[i+1].isdigit() and smiles[i+2].isdigit():
+                marker = '%' + smiles[i+1:i+3]
+                if marker in ring_markers:
+                    # Found closing marker - ring is complete
+                    ring_count += 1
+                    del ring_markers[marker]
+                else:
+                    # Found opening marker
+                    ring_markers[marker] = i
+                i += 3
+            else:
+                i += 1
+        else:
+            i += 1
+    
+    # Count any unclosed rings (in incomplete SMILES)
+    ring_count += len(ring_markers)
+    
+    return ring_count
 
 def num_tetrahedral_carbon(smiles):
     """
