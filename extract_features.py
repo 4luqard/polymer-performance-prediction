@@ -833,18 +833,18 @@ def molecular_weight(features: dict) -> float:
         'N': 14.007,
         'O': 15.999,
         'F': 18.998,
-        'Na': 22.990,
-        'Si': 28.085,
+        '[Na]': 22.990,
+        '[Si]': 28.085,
         'P': 30.974,
         'S': 32.06,
         'Cl': 35.45,
-        'Ca': 40.078,
-        'Ge': 72.63,
-        'Se': 78.96,
+        '[Ca]': 40.078,
+        '[Ge]': 72.63,
+        '[Se]': 78.96,
         'Br': 79.904,
-        'Cd': 112.41,
-        'Sn': 118.71,
-        'Te': 127.60,
+        '[Cd]': 112.41,
+        '[Sn]': 118.71,
+        '[Te]': 127.60,
     }
     
     total_weight = 0
@@ -876,18 +876,18 @@ def vdw_volume(features: dict) -> float:
         'N': 15.59,   # radius 1.55 Å
         'O': 14.74,   # radius 1.52 Å
         'F': 13.94,   # radius 1.47 Å
-        'Na': 51.38,  # radius 2.27 Å
-        'Si': 38.79,  # radius 2.10 Å
+        '[Na]': 51.38,  # radius 2.27 Å
+        '[Si]': 38.79,  # radius 2.10 Å
         'P': 24.43,   # radius 1.80 Å
         'S': 24.43,   # radius 1.80 Å
         'Cl': 22.45,  # radius 1.75 Å
-        'Ca': 55.85,  # radius 2.31 Å
-        'Ge': 31.15,  # radius 1.95 Å
-        'Se': 28.73,  # radius 1.90 Å
+        '[Ca]': 55.85,  # radius 2.31 Å
+        '[Ge]': 31.15,  # radius 1.95 Å
+        '[Se]': 28.73,  # radius 1.90 Å
         'Br': 26.52,  # radius 1.85 Å
-        'Cd': 34.53,  # radius 2.01 Å
-        'Sn': 42.8,   # radius 2.17 Å
-        'Te': 36.62,  # radius 2.06 Å
+        '[Cd]': 34.53,  # radius 2.01 Å
+        '[Sn]': 42.8,   # radius 2.17 Å
+        '[Te]': 36.62,  # radius 2.06 Å
     }
     
     # Conversion factor from Å³ to cm³/mol
@@ -900,3 +900,32 @@ def vdw_volume(features: dict) -> float:
             total_volume += vdw_volumes_A3[atom] * count * conversion_factor
     
     return total_volume
+
+def density_estimate(features: dict) -> float:
+    """
+    Estimate density from molecular weight and van der Waals volume.
+    
+    Args:
+        features: Dictionary containing 'molecular_weight' and 'vdw_volume'
+    
+    Returns:
+        Estimated density in g/cm³
+    """
+    # Check for empty dictionary
+    if not features:
+        return 0
+    
+    # Get molecular weight and vdw volume
+    mol_weight = features.get('molecular_weight', 0)
+    vdw_vol = features.get('vdw_volume', 0)
+    
+    # Return 0 if either value is 0 or missing
+    if mol_weight == 0 or vdw_vol == 0:
+        return 0
+    
+    # Calculate density: molecular weight / van der Waals volume
+    # The vdw_volume is already in cm³/mol and molecular_weight is in g/mol
+    # So density = g/mol / (cm³/mol) = g/cm³
+    density = mol_weight / vdw_vol
+    
+    return density

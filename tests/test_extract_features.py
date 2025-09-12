@@ -160,5 +160,15 @@ def test_vdw_volume():
     # Empty SMILES string
     assert vdw_volume({'C': 0, 'N': 0, 'O': 0}) == 0
 
+def test_density_estimate():
+    # weight over volume, unit
+    assert np.isclose(density_estimate({'molecular_weight': 125.108, 'vdw_volume': 115.815}), 1.080, atol=1e-2)
+
+    # Empty dict
+    assert density_estimate({}) == 0
+
+    # Empty SMILES string
+    assert density_estimate({'molecular_weight': 0, 'vdw_volume': 0}) == 0
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -321,6 +321,9 @@ def extract_molecular_features(smiles, rpt):
     # Stereochemistry
     features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
 
+    # Target estimates
+    features['density_estimate'] = density_estimate(features) # grams per centimeter cubed
+
     # Count bonds
     features['num_single_bonds'] = smiles.count('-')
     features['num_double_bonds'] = smiles.count('=')
@@ -349,29 +352,13 @@ def extract_molecular_features(smiles, rpt):
     # features['aromatic_ratio'] = features['num_aromatic_atoms'] / (features['heavy_atom_count'] + features['ion_count'])
     
     # Flexibility indicators
-    features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
+    # features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
     # features['flexibility_score'] = features['rotatable_bond_estimate'] / max(features['heavy_atom_count'], 1)
 
     # Size and complexit2.326e-23y
     features['molecular_complexity'] = (features['num_rings'] + features['num_branches'] + 
                                        features['num_tetrahedral_carbon'])
     
-    # Density estimate: molecular weight / volume
-    # Convert from g/mol/Å³ to g/cm³
-    # 1 Å³ = 10⁻²⁴ cm³, 1 mol = 6.022 × 10²³ molecules
-    # Conversion factor: 10²⁴ / 6.022 × 10²³ = 1.66054
-    # if vdw_volume > 0:
-    #     density_g_mol_A3 = mol_weight / vdw_volume
-    #     features['density_estimate'] = round(density_g_mol_A3 * 1.66054, 3)
-
-    #     # FFV estimation using original density units
-    #     # FFV = (V - 1.3 × Vw) / V where V = 1/density in Å³/(g/mol)
-    #     specific_volume = 1.0 / density_g_mol_A3  # Å³/(g/mol)
-    #     features['ffv_estimate'] = round((specific_volume - 1.3 * vdw_volume) / specific_volume, 3)
-    # else:
-    #     features['density_estimate'] = 0.0
-    #     features['ffv_estimate'] = 0.0
-
     # Additional polymer-specific patterns
     # Phenyl: aromatic 6-membered ring patterns
     features['has_phenyl'] = int(bool(re.search(r'c1ccccc1|c1ccc.*cc1', smiles)))
@@ -380,9 +367,6 @@ def extract_molecular_features(smiles, rpt):
     segments = [x for x in re.split(r'[\(\)]', smiles) if x]
     features['chain_length_estimate'] = max(len(x) for x in segments) if segments else 0
     
-    # Additional structural patterns
-    # features['has_fused_rings'] = int(bool(re.search(r'[0-9].*c.*[0-9]', smiles)))
-
     # Bridge: multiple different ring numbers
     ring_numbers = set(re.findall(r'[0-9]', smiles))
     features['has_bridge'] = int(len(ring_numbers) >= 2)
@@ -391,7 +375,7 @@ def extract_molecular_features(smiles, rpt):
     features['main_branch_atoms'] = calculate_main_branch_atoms(smiles)
     
     # Main branch atom ratio (main branch atoms / total heavy atoms)
-    # features['main_branch_atom_ratio'] = round(features['main_branch_atoms'] / max(features['heavy_atom_count'], 1), 3)
+    features['main_branch_atom_ratio'] = round(features['main_branch_atoms'] / max(features['heavy_atom_amount'], 1), 3)
 
     # Backbone bonds count
     features['backbone_bonds'] = calculate_backbone_bonds(smiles)
