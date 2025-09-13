@@ -439,7 +439,7 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=256, random_state=42, all_analyzer_results=None):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=256, random_state=42, is_Kaggle=True):
     """
     Apply supervised encoder for dimensionality reduction.
 
@@ -460,6 +460,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     import numpy as np
     import random
     import os
+    from sklearn.model_selection import train_test_split
 
     if y_train is None:
         raise ValueError("y_train must be provided for supervised autoencoder")
@@ -481,6 +482,26 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         except Exception:
             pass
 
+    # Residual analysis: Split data into train/val/test for analysis
+    enable_residual_analysis = not is_Kaggle
+    
+    if enable_residual_analysis:
+        # Create train/val/test split for residual analysis
+        X_train_split, X_temp, y_train_split, y_temp = train_test_split(
+            X_train, y_train, test_size=0.3, random_state=random_state
+        )
+        X_val_split, X_test_split, y_val_split, y_test_split = train_test_split(
+            X_temp, y_temp, test_size=0.30, random_state=random_state
+        )
+        
+        # Use the split data for training
+        X_train_model = X_train_split
+        y_train_model = y_train_split
+    else:
+        # Use original approach
+        X_train_model = X_train
+        y_train_model = y_train
+
     input_dim = X_train.shape[1]
     encoder = Sequential([
         Dense(int(latent_dim), activation='linear', input_shape=(input_dim,)),
@@ -491,25 +512,81 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     input_layer = Input(shape=(input_dim,))
     encoded = encoder(input_layer)
 
-    num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
+    num_targets = y_train_model.shape[1] if len(y_train_model.shape) > 1 else 1
     predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
 
     model = Model(inputs=input_layer, outputs=predictions)
     model.compile(optimizer='adam', loss='mae')
 
-    y_train_filled = np.nan_to_num(y_train, nan=0.0)
-    sample_weights = np.where(np.isnan(y_train), 0.0, 1.0)
+    y_train_filled = np.nan_to_num(y_train_model, nan=0.0)
+    sample_weights = np.where(np.isnan(y_train_model), 0.0, 1.0)
     sample_weights = np.mean(sample_weights, axis=1 if len(sample_weights.shape) > 1 else 0)
 
-    model.fit(
-        X_train,
-        y_train_filled,
-        sample_weight=sample_weights,
-        epochs=epochs,
-        batch_size=batch_size,
-        verbose=1,
-        validation_split = 0.20
-    )
+    if enable_residual_analysis:
+        # Train without validation_split for residual analysis
+        model.fit(
+            X_train_model,
+            y_train_filled,
+            sample_weight=sample_weights,
+            epochs=epochs,
+            batch_size=batch_size,
+            verbose=1,
+            validation_data=(X_val_split, np.nan_to_num(y_val_split, nan=0.0))
+        )
+        
+        # Compute residuals for all splits
+        train_pred = model.predict(X_train_split)
+        val_pred = model.predict(X_val_split)  
+        test_pred = model.predict(X_test_split)
+        
+        # Calculate residuals (only for non-NaN values)
+        train_residuals = np.where(np.isnan(y_train_split), np.nan, train_pred - y_train_split)
+        val_residuals = np.where(np.isnan(y_val_split), np.nan, val_pred - y_val_split)
+        test_residuals = np.where(np.isnan(y_test_split), np.nan, test_pred - y_test_split)
+        
+        # Create DataFrame with all information
+        residual_data = {
+            'split': (['train'] * len(X_train_split) + 
+                     ['val'] * len(X_val_split) + 
+                     ['test'] * len(X_test_split))
+        }
+        
+        # Add features
+        X_all = np.vstack([X_train_split, X_val_split, X_test_split])
+        for i in range(X_all.shape[1]):
+            residual_data[f'feature_{i}'] = X_all[:, i]
+        
+        # Add targets and predictions
+        y_all = np.vstack([y_train_split, y_val_split, y_test_split])
+        pred_all = np.vstack([train_pred, val_pred, test_pred])
+        residuals_all = np.vstack([train_residuals, val_residuals, test_residuals])
+        
+        target_names = ['Tg', 'FFV', 'Tc', 'Density', 'Rg'] if num_targets == 5 else [f'target_{i}' for i in range(num_targets)]
+        
+        for i, name in enumerate(target_names[:num_targets]):
+            residual_data[f'{name}_actual'] = y_all[:, i]
+            residual_data[f'{name}_pred'] = pred_all[:, i]
+            residual_data[f'{name}_residual'] = residuals_all[:, i]
+        
+        # Save to parquet
+        residual_df = pd.DataFrame(residual_data)
+        output_path = 'autoencoder_residuals.parquet'
+        residual_df.to_parquet(output_path, index=False)
+        print(f"Residual analysis saved to {output_path}")
+        print(f"Shape: {residual_df.shape}")
+        print(f"Splits: train={len(X_train_split)}, val={len(X_val_split)}, test={len(X_test_split)}")
+        
+    else:
+        # Original training with validation_split
+        model.fit(
+            X_train_model,
+            y_train_filled,
+            sample_weight=sample_weights,
+            epochs=epochs,
+            batch_size=batch_size,
+            verbose=1,
+            validation_split=0.20
+        )
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
 
@@ -538,7 +615,7 @@ def select_features_for_target(X, target):
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
                     pca_variance_threshold=None, use_pls=False, pls_n_components=50,
                     y_train=None, epochs=100, use_transformer=False, transformer_latent_dim=16,
-                    smiles_train=None, smiles_test=None):
+                    smiles_train=None, smiles_test=None, is_Kaggle=True):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -587,7 +664,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     global_pca = None
     if use_autoencoder:
         print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs, all_analyzer_results=all_analyzer_results)
+        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs, is_Kaggle=is_Kaggle)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     elif use_pls:

@@ -222,6 +222,7 @@ data/
 *.pkl
 residual_plots/
 residual_results/
+autoencoder_residuals.parquet
 
 # notebooks
 notebooks/

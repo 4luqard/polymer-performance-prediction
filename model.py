@@ -166,7 +166,8 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         use_transformer=USE_TRANSFORMER,
         transformer_latent_dim=TRANSFORMER_LATENT_DIM,
         smiles_train=train_df['SMILES'],
-        smiles_test=test_df['SMILES']
+        smiles_test=test_df['SMILES'],
+        is_Kaggle=IS_KAGGLE
     )
     
     # Run cross-validation if requested (but not on Kaggle)
