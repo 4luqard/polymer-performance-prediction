@@ -295,7 +295,7 @@ def extract_molecular_features(smiles, rpt):
     features['length'] = len(smiles) # No units
 
     # Number of atoms on the longest chain of atoms
-    # features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
+    features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
 
     # Ring features
     features['num_fused_rings'] = num_fused_rings(smiles) # No units
@@ -418,7 +418,7 @@ def prepare_features(df):
     features_list = []
     
     for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing molecules"):
-        if False: #'*' in row['SMILES']:
+        if '*' in row['SMILES']:
             row['SMILES_rpt'] = row['SMILES'].split('*')[1]
             for col in ['SMILES', 'SMILES_rpt']:
                 rpt = False if col == 'SMILES' else True
@@ -567,7 +567,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     X_train_encoded = encoder_model.predict(X_train)
     
     # Run residual analysis if enabled
-    if should_run_analysis() and ResidualAnalysisHook is not None:
+    if False: #should_run_analysis() and ResidualAnalysisHook is not None:
         residual_hook = ResidualAnalysisHook()
         residual_hook.register_analyzer('autoencoder', AutoencoderResidualAnalyzer())
         
