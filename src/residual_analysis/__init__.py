@@ -691,35 +691,6 @@ class LightGBMResidualAnalyzer(ResidualAnalyzer):
         return results
 
 
-class TransformerResidualAnalyzer(ResidualAnalyzer):
-    """Residual analyzer for Transformer models"""
-    
-    def analyze(self, predictions: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze Transformer predictions including attention patterns"""
-        results = {}
-        
-        if 'predictions' in predictions:
-            # Analyze prediction residuals
-            # Note: y_true should be passed separately in real implementation
-            results['residuals'] = predictions.get('residuals', {})
-        
-        if 'attention_weights' in predictions:
-            # Analyze attention patterns
-            attention = predictions['attention_weights']
-            results['attention_analysis'] = {
-                'mean_attention': np.mean(attention, axis=0),
-                'attention_entropy': -np.sum(attention * np.log(attention + 1e-9), axis=-1).mean()
-            }
-        
-        if 'hidden_states' in predictions:
-            # Analyze hidden states
-            hidden = predictions['hidden_states']
-            results['hidden_analysis'] = {
-                'mean_activation': np.mean(hidden),
-                'std_activation': np.std(hidden)
-            }
-        
-        return results
 
 
 class AutoencoderResidualAnalyzer(ResidualAnalyzer):
@@ -824,7 +795,6 @@ __all__ = [
     'ResidualAnalysis',
     'ResidualAnalyzer',
     'LightGBMResidualAnalyzer', 
-    'TransformerResidualAnalyzer',
     'AutoencoderResidualAnalyzer',
     'PCAResidualAnalyzer',
     'PLSResidualAnalyzer',

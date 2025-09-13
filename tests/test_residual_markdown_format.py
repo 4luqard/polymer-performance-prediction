@@ -233,36 +233,6 @@ class TestResidualMarkdownFormat:
                 assert content.count("Seed: 42") == 3, "Should have 3 entries for seed 42"
                 assert content.count("Seed: 123") == 3, "Should have 3 entries for seed 123"
     
-    def test_transformer_residual_saving(self):
-        """Test that transformer residual analysis results are saved to residual_analysis_preprocessing_methods."""
-        # This test verifies the fix for transformer residual saving
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from src.residual_analysis import ResidualAnalysis
-            
-            # Create analyzer with tmpdir
-            analyzer = ResidualAnalysis(output_dir=tmpdir)
-            
-            # Mock transformer residual results
-            mock_results = {
-                'transformer': {
-                    'mse': 0.015,
-                    'rmse': 0.122,
-                    'mae': 0.095,
-                    'r2': 0.88
-                }
-            }
-            
-            # Save the results like data_processing does
-            with patch('src.residual_analysis.should_run_analysis', return_value=True):
-                analyzer.save_results(mock_results, "preprocessing_methods")
-            
-            # Check that the file was created
-            output_file = Path(tmpdir) / "residual_analysis_preprocessing_methods.txt"
-            assert output_file.exists(), "residual_analysis_preprocessing_methods.txt should exist"
-            
-            # Read and verify contents
-            content = output_file.read_text()
-            assert "TRANSFORMER" in content or "transformer" in content, "Transformer results should be in the file"
 
 
 if __name__ == "__main__":

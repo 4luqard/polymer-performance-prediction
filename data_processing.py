@@ -23,7 +23,6 @@ from extract_features import *
 try:
     from src.residual_analysis import (
         ResidualAnalysisHook, 
-        TransformerResidualAnalyzer,
         PCAResidualAnalyzer,
         PLSResidualAnalyzer,
         should_run_analysis
@@ -663,8 +662,7 @@ def select_features_for_target(X, target):
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
                     pca_variance_threshold=None, use_pls=False, pls_n_components=50,
-                    y_train=None, epochs=100, use_transformer=False, transformer_latent_dim=16,
-                    smiles_train=None, smiles_test=None, is_Kaggle=True):
+                    y_train=None, epochs=100, is_Kaggle=True):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -809,88 +807,6 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     
     print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
     
-    # Add transformer features if enabled
-    if use_transformer:
-        print(f"Adding transformer latent features (latent_dim={transformer_latent_dim})...")
-        try:
-            from transformer_model import TransformerModel
-            
-            # Ensure we have SMILES data
-            if smiles_train is None or smiles_test is None:
-                print("Error: SMILES data required for transformer. Skipping transformer features.")
-                # Save all analyzer results if any were collected
-                if all_analyzer_results and should_run_analysis():
-                    try:
-                        from src.residual_analysis import ResidualAnalysis
-                        base_analyzer = ResidualAnalysis()
-                        base_analyzer.save_results(all_analyzer_results, "preprocessing_methods")
-                        print(f"  Saved preprocessing analyzer results for {list(all_analyzer_results.keys())} methods")
-                    except Exception as e:
-                        print(f"Warning: Could not save preprocessing analyzer results: {e}")
-                return X_train_preprocessed, X_test_preprocessed
-            
-            # Initialize and train transformer (optimized for speed)
-            transformer = TransformerModel(
-                vocab_size=None,  # Will use default tokenizer vocab
-                target_dim=5,
-                latent_dim=transformer_latent_dim,  # Use provided latent dimension
-                num_heads=1,  # Reduced heads for speed
-                num_encoder_layers=1,  # Single layer for speed
-                num_decoder_layers=1,  # Single layer for speed
-                ff_dim=32,  # Reduced FF dimension
-                random_state=42,
-                max_length=200  # Reduced max length for memory efficiency
-            )
-            
-            # Fit transformer on training data using SMILES directly (optimized)
-            transformer.fit(smiles_train, y_train, epochs=3, batch_size=256, verbose=0)
-            
-            # Extract latent features
-            if should_run_analysis() and hasattr(transformer, 'transform'):
-                # Get transformer features and analyzer results
-                result = transformer.transform(smiles_train, return_analyzer_results=True)
-                if isinstance(result, tuple):
-                    transformer_features_train, analyzer_results = result
-                    if analyzer_results and all_analyzer_results is not None:
-                        all_analyzer_results['transformer'] = analyzer_results
-                else:
-                    transformer_features_train = result
-                transformer_features_test = transformer.transform(smiles_test)
-            else:
-                transformer_features_train = transformer.transform(smiles_train)
-                transformer_features_test = transformer.transform(smiles_test)
-            
-            # Add transformer features to the preprocessed data
-            transformer_cols = [f'transformer_{i}' for i in range(transformer_latent_dim)]
-            
-            X_train_with_transformer = pd.concat([
-                X_train_preprocessed,
-                pd.DataFrame(transformer_features_train, index=X_train_preprocessed.index, columns=transformer_cols)
-            ], axis=1)
-            
-            X_test_with_transformer = pd.concat([
-                X_test_preprocessed,
-                pd.DataFrame(transformer_features_test, index=X_test_preprocessed.index, columns=transformer_cols)
-            ], axis=1)
-            
-            print(f"Added {transformer_latent_dim} transformer features. New shape: {X_train_with_transformer.shape}")
-            
-            # Save all analyzer results if any were collected
-            if all_analyzer_results and should_run_analysis():
-                try:
-                    from src.residual_analysis import ResidualAnalysis
-                    base_analyzer = ResidualAnalysis()
-                    base_analyzer.save_results(all_analyzer_results, "preprocessing_methods")
-                    print(f"  Saved preprocessing analyzer results for {list(all_analyzer_results.keys())} methods")
-                except Exception as e:
-                    print(f"Warning: Could not save preprocessing analyzer results: {e}")
-            
-            return X_train_with_transformer, X_test_with_transformer
-            
-        except ImportError:
-            print("Warning: transformer_model not found. Skipping transformer features.")
-        except Exception as e:
-            print(f"Warning: Error adding transformer features: {e}")
     
     # Save all analyzer results if any were collected
     if all_analyzer_results and should_run_analysis():

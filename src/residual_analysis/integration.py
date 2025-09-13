@@ -6,7 +6,6 @@ import pandas as pd
 from .import (
     ResidualAnalysis,
     LightGBMResidualAnalyzer,
-    TransformerResidualAnalyzer,
     AutoencoderResidualAnalyzer,
     PCAResidualAnalyzer,
     PLSResidualAnalyzer,
@@ -92,7 +91,7 @@ class ResidualAnalysisHook:
         
         if model_type == 'lightgbm':
             return analyzer.analyze(model, **kwargs)
-        elif model_type in ['transformer', 'autoencoder', 'pca', 'pls']:
+        elif model_type in ['autoencoder', 'pca', 'pls']:
             return analyzer.analyze(outputs, **kwargs)
         
         return None
@@ -271,7 +270,6 @@ def integrate_with_data_processing(process_function: Callable) -> Callable:
         
         if enable_residual:
             hook = ResidualAnalysisHook()
-            hook.register_analyzer('transformer', TransformerResidualAnalyzer())
             hook.register_analyzer('autoencoder', AutoencoderResidualAnalyzer()) 
             hook.register_analyzer('pca', PCAResidualAnalyzer())
             hook.register_analyzer('pls', PLSResidualAnalyzer())

@@ -33,7 +33,6 @@ neurips-open-polymer-prediction-2025/
 ├── data_processing.py          # Feature engineering pipeline
 ├── cv.py                       # Cross-validation logic
 ├── config.py                   # Configuration parameters
-└── transformer_model.py        # Alternative model architecture
 ```
 
 ## Technology Stack
