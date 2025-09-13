@@ -483,9 +483,9 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
 
     input_dim = X_train.shape[1]
     encoder = Sequential([
-        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='relu', input_shape=(input_dim,)),
-        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='tanh'),
-        Dense(latent_dim, activation='linear')
+        Dense(int(latent_dim), activation='linear', input_shape=(input_dim,)),
+        # Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='tanh'),
+        # Dense(latent_dim, activation='linear')
     ])
 
     input_layer = Input(shape=(input_dim,))
@@ -498,7 +498,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     model.compile(optimizer='adam', loss='mae')
 
     y_train_filled = np.nan_to_num(y_train, nan=0.0)
-    sample_weights = np.where(np.isnan(y_train), 0.0, 1.0)
+    sample_weights = np.where(np.isnan(y_train), 0.5, 1.0)
     sample_weights = np.mean(sample_weights, axis=1 if len(sample_weights.shape) > 1 else 0)
 
     model.fit(
