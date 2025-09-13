@@ -19,16 +19,11 @@ import math
 
 # Import data processing functions
 from data_processing import (
-    calculate_main_branch_atoms,
-    calculate_backbone_bonds,
-    calculate_average_bond_length,
     extract_molecular_features,
     prepare_features,
     apply_autoencoder,
-    select_features_for_target,
     preprocess_data,
     load_competition_data,
-    TARGET_FEATURES
 )
 
 import warnings
@@ -41,16 +36,6 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 USE_AUTOENCODER = True
 AUTOENCODER_LATENT_DIM = 64  # Number of latent dimensions
 EPOCHS = 20
-
-# Import competition metric and CV functions only if not on Kaggle
-if not IS_KAGGLE:
-    from src.competition_metric import neurips_polymer_metric
-    from src.diagnostics import CVDiagnostics
-    from cv import perform_cross_validation, perform_multi_seed_cv
-    from src.residual_analysis import ResidualAnalysisHook, LightGBMResidualAnalyzer, should_run_analysis
-
-
-# Already checked above
 
 # Set paths based on environment
 if IS_KAGGLE:
@@ -83,9 +68,6 @@ else:
         'data/raw/extra_datasets/TgSS_enriched_cleaned.csv',
         'data/raw/extra_datasets/tg_density.csv'
     ]
-
-# Target columns
-TARGETS = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
 
 def main(cv_only=False, use_supplementary=True):
     """
@@ -161,26 +143,23 @@ def main(cv_only=False, use_supplementary=True):
 
     # Run cross-validation if requested (but not on Kaggle)
     if cv_only:
-        if IS_KAGGLE:
-            print("\n⚠️  Cross-validation is not available in Kaggle notebooks")
-            print("Proceeding with submission generation instead...")
+        from cv import perform_multi_seed_cv
+        print("\n=== Testing with Multiple Random Seeds ===")
+        if not use_supplementary:
+            print("** Running CV WITHOUT supplementary datasets **")
         else:
-            print("\n=== Testing with Multiple Random Seeds ===")
-            if not use_supplementary:
-                print("** Running CV WITHOUT supplementary datasets **")
-            else:
-                print("** Running CV WITH supplementary datasets **")
+            print("** Running CV WITH supplementary datasets **")
             
-            # Run multi-seed CV with target-specific features (current implementation)
-            multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5, 
-                                                     target_columns=target_columns,
-                                                     enable_diagnostics=False,
-                                                     lgb_params=lgb_params,
-                                                     smiles=train_df['SMILES'])
+        # Run multi-seed CV with target-specific features (current implementation)
+        multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5,
+                                                  target_columns=target_columns,
+                                                  enable_diagnostics=False,
+                                                  lgb_params=lgb_params,
+                                                  smiles=train_df['SMILES'])
             
-            return {
-                'multi_seed': multi_seed_result
-            }
+        return {
+            'multi_seed': multi_seed_result
+        }
     
     # Train separate models for each target
     print(f"\n=== Training Separate {'LIGHTGBM'} Models for Each Target ===")
@@ -244,23 +223,6 @@ def main(cv_only=False, use_supplementary=True):
         'Density': predictions[:, 3],
         'Rg': predictions[:, 4]
     })
-    
-    # Run residual analysis if enabled (only for validation data if available)
-    if not IS_KAGGLE and should_run_analysis():
-        residual_hook = ResidualAnalysisHook()
-        residual_hook.register_analyzer('lightgbm', LightGBMResidualAnalyzer())
-        
-        # Since we don't have test labels, we can analyze model characteristics
-        print("\nPerforming residual analysis on model characteristics...")
-        for i, target in enumerate(target_columns):
-            if target in locals() and 'model' in locals():
-                analyzer_results = residual_hook.analyze_model_specific(
-                    'lightgbm',
-                    model=model,
-                    predictions=predictions[:, i]
-                )
-                if analyzer_results:
-                    print(f"  Analyzed {target} model")
     
     # Save submission
     print(f"\nSaving submission to {SUBMISSION_PATH}...")

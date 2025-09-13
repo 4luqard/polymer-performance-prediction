@@ -14,7 +14,6 @@ import re
 import math
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
 from extract_features import *
 
@@ -191,15 +190,6 @@ def extract_molecular_features(smiles, rpt):
             del features[feature]
 
     return features
-
-# Define target-specific features to use
-TARGET_FEATURES = {
-    'Tg': ['num_C', 'num_n'],  # Top 2 atom features
-    'FFV': ['num_S', 'num_n'], 
-    'Tc': ['num_C', 'num_S'],
-    'Density': ['num_Cl', 'num_Br'],
-    'Rg': ['num_F', 'num_Cl']
-}
 
 
 
@@ -390,19 +380,6 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     else:
         X_test_encoded = encoder_model.predict(X_test)
         return X_train_encoded, X_test_encoded
-
-def select_features_for_target(X, target):
-    """Select features for a specific target"""
-    # Get all non-atom features
-    atom_features = ['num_C', 'num_c', 'num_O', 'num_o', 'num_N', 'num_n', 
-                    'num_S', 'num_s', 'num_F', 'num_Cl', 'num_Br', 'num_I', 'num_P']
-    non_atom_features = [col for col in X.columns if col not in atom_features]
-    
-    # Since molecular_weight is commented out, no need to exclude features
-    
-    # Select features: all non-atom features + target-specific atom features
-    selected_features = non_atom_features + TARGET_FEATURES[target]
-    return X[selected_features]
 
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
