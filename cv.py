@@ -156,46 +156,44 @@ def update_features_md(feature_importance, features_path=None):
     else:
         features_path = Path(features_path)
     
-    # Read existing content
+    start_marker = "<!-- FEATURE_IMPORTANCE_START -->"
+    end_marker = "<!-- FEATURE_IMPORTANCE_END -->"
+
     if features_path.exists():
         with open(features_path, 'r') as f:
             content = f.read()
+        if start_marker in content and end_marker in content:
+            start = content.index(start_marker)
+            end = content.index(end_marker) + len(end_marker)
+            content = content[:start].rstrip() + "\n\n" + content[end:].lstrip()
+        else:
+            content = "# Features\n\n"
     else:
         content = "# Features\n\n"
-    
-    # Create feature importance section
-    importance_section = f"\n## Feature Importance (SHAP-based)\n\n"
-    importance_section += f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n"
-    
+
+    importance_lines = [start_marker,
+                        "## Feature Importance (SHAP-based)",
+                        f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
+                        ""]
+
     for target, importance in feature_importance.items():
         if not importance:
             continue
-            
-        importance_section += f"### {target}\n\n"
-        
-        # Sort features by importance
+        importance_lines.append(f"### {target}")
+
         sorted_features = sorted(importance.items(), key=lambda x: x[1], reverse=True)
-        
-        # Add top features
-        importance_section += "| Feature | SHAP Importance |\n"
-        importance_section += "|---------|----------------|\n"
-        
-        for feature, score in sorted_features[:20]:  # Top 20 features
-            importance_section += f"| {feature} | {score:.4f} |\n"
-        
-        importance_section += "\n"
-    
-    # Check if feature importance section exists
-    if "## Feature Importance" in content or "# Feature Importance" in content:
-        # Replace existing section
-        import re
-        pattern = r'(##? Feature Importance.*?)(?=(##? [^#]|\Z))'
-        content = re.sub(pattern, importance_section, content, flags=re.DOTALL)
-    else:
-        # Append new section
-        content += importance_section
-    
-    # Write updated content
+
+        importance_lines.append("| Feature | SHAP Importance |")
+        importance_lines.append("|---------|----------------|")
+        for feature, score in sorted_features[:20]:
+            importance_lines.append(f"| {feature} | {score:.4f} |")
+        importance_lines.append("")
+
+    importance_lines.append(end_marker)
+    importance_section = "\n".join(importance_lines)
+
+    content = content.rstrip() + "\n\n" + importance_section + "\n"
+
     with open(features_path, 'w') as f:
         f.write(content)
     
