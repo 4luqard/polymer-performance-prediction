@@ -294,7 +294,7 @@ def extract_molecular_features(smiles, rpt):
     features['length'] = len(smiles) # No units
 
     # Number of atoms on the longest chain of atoms
-    features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
+    # features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
 
     # Ring features
     features['num_fused_rings'] = num_fused_rings(smiles) # No units
@@ -507,7 +507,8 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         sample_weight=sample_weights,
         epochs=epochs,
         batch_size=batch_size,
-        verbose=0
+        verbose=1,
+        validation_split = 0.20
     )
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
