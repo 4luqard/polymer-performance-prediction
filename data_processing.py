@@ -24,7 +24,6 @@ try:
     from src.residual_analysis import (
         ResidualAnalysisHook, 
         TransformerResidualAnalyzer,
-        AutoencoderResidualAnalyzer,
         PCAResidualAnalyzer,
         PLSResidualAnalyzer,
         should_run_analysis
@@ -440,51 +439,48 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, supervised=True, random_state=42, all_analyzer_results=None):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, random_state=42, all_analyzer_results=None):
     """
-    Apply autoencoder for dimensionality reduction.
-    
+    Apply supervised encoder for dimensionality reduction.
+
     Args:
         X_train: Training data (n_samples, n_features)
         X_test: Test data (optional)
-        y_train: Target values for supervised learning (optional)
+        y_train: Target values for supervised learning
         latent_dim: Number of dimensions in the latent space
         epochs: Number of training epochs
         batch_size: Batch size for training
-        supervised: Whether to use supervised autoencoder with target prediction
         random_state: Random seed for reproducibility
-    
+
     Returns:
         If X_test is None: X_train_encoded
         If X_test is provided: (X_train_encoded, X_test_encoded)
-    
+
     """
-    # Set seeds for reproducibility
     import numpy as np
     import random
     import os
-    
-    # Set all random seeds
+
+    if y_train is None:
+        raise ValueError("y_train must be provided for supervised autoencoder")
+
     np.random.seed(random_state)
     random.seed(random_state)
     os.environ['PYTHONHASHSEED'] = str(random_state)
-    
-    # Try to import tensorflow and set its seed
+
     try:
         import tensorflow as tf
         tf.random.set_seed(random_state)
-        # For older versions of tensorflow/keras
         if hasattr(tf, 'set_random_seed'):
             tf.set_random_seed(random_state)
     except ImportError:
-        # If tensorflow not available, try keras backend
         try:
             import keras.backend as K
             if hasattr(K, 'set_random_seed'):
                 K.set_random_seed(random_state)
-        except:
-            pass    
-    # Define encoder architecture
+        except Exception:
+            pass
+
     input_dim = X_train.shape[1]
     encoder = Sequential([
         Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='relu', input_shape=(input_dim,)),
@@ -492,108 +488,37 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         Dense(latent_dim, activation='linear')
     ])
 
-    # Define decoder architecture
-    decoder = Sequential([
-        Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='relu', input_shape=(latent_dim,)),
-        Dense(int(latent_dim+(input_dim-latent_dim)/1.5), activation='tanh'),
-        Dense(input_dim, activation='linear')
-    ])
-
-    # Create input layer
     input_layer = Input(shape=(input_dim,))
-    # Pass through encoder
     encoded = encoder(input_layer)
-    # Pass through decoder
-    decoded = decoder(encoded)
-    
-    # If supervised mode and targets provided, add prediction head
-    if supervised and y_train is not None:
-        # Add prediction head from latent space
-        num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
-        predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
-        
-        # Create model with dual outputs
-        model = Model(inputs=input_layer, outputs=[decoded, predictions])
-        
-        # Custom loss weighting
-        reconstruction_weight = 1.0
-        prediction_weight = 0.5  # Balance between reconstruction and prediction
-        
-        # Compile model with dual losses
-        model.compile(
-            optimizer='adam',
-            loss=['mae', 'mae'],
-            loss_weights=[reconstruction_weight, prediction_weight]
-        )
-        
-        # Prepare training data - handle missing values in targets
-        y_train_filled = np.nan_to_num(y_train, nan=0.0)  # Fill NaN with 0 for training
-        
-        # Create sample weights to ignore missing values
-        # For multi-output regression, we need to average the weights across targets
-        sample_weights_pred = np.where(np.isnan(y_train), 0.0, 1.0)
-        # Average across targets to get a single weight per sample
-        sample_weights_pred = np.mean(sample_weights_pred, axis=1 if len(sample_weights_pred.shape) > 1 else 0)
-            
-        # Train the model - only pass sample weights for predictions
-        # Create equal weights for reconstruction loss
-        sample_weights_recon = np.ones(X_train.shape[0])
-        
-        model.fit(
-            X_train, 
-            [X_train, y_train_filled],
-            sample_weight=[sample_weights_recon, sample_weights_pred],
-            epochs=epochs, 
-            batch_size=batch_size, 
-            verbose=0
-        )
-        
-        # Create encoder model for extracting latent representations
-        encoder_model = Model(inputs=input_layer, outputs=encoded)
-        
-    else:
-        # Unsupervised mode - original behavior
-        autoencoder = Model(inputs=input_layer, outputs=decoded)
-        
-        # Compile and train the model
-        loss = keras.losses.MeanAbsoluteError()
-        autoencoder.compile(optimizer='adam', loss=loss)
-        autoencoder.fit(X_train, X_train, epochs=epochs, batch_size=batch_size, verbose=1)
-        
-        # Create encoder model for extracting latent representations
-        encoder_model = Model(inputs=input_layer, outputs=encoded)
-    
-    # Extract encoder and apply to data
+
+    num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
+    predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
+
+    model = Model(inputs=input_layer, outputs=predictions)
+    model.compile(optimizer='adam', loss='mae')
+
+    y_train_filled = np.nan_to_num(y_train, nan=0.0)
+    sample_weights = np.where(np.isnan(y_train), 0.0, 1.0)
+    sample_weights = np.mean(sample_weights, axis=1 if len(sample_weights.shape) > 1 else 0)
+
+    model.fit(
+        X_train,
+        y_train_filled,
+        sample_weight=sample_weights,
+        epochs=epochs,
+        batch_size=batch_size,
+        verbose=0
+    )
+
+    encoder_model = Model(inputs=input_layer, outputs=encoded)
+
     X_train_encoded = encoder_model.predict(X_train)
-    
-    # Run residual analysis if enabled
-    if False: #should_run_analysis() and ResidualAnalysisHook is not None:
-        residual_hook = ResidualAnalysisHook()
-        residual_hook.register_analyzer('autoencoder', AutoencoderResidualAnalyzer())
-        
-        # Get reconstructions for analysis
-        X_train_reconstructed = autoencoder.predict(X_train)
-        
-        outputs = {
-            'original': X_train,
-            'reconstructed': X_train_reconstructed,
-            'latent': X_train_encoded
-        }
-        
-        analyzer_results = residual_hook.analyze_model_specific('autoencoder', outputs=outputs)
-        if analyzer_results:
-            print(f"  Autoencoder residual analysis completed")
-            if all_analyzer_results is not None:
-                all_analyzer_results['autoencoder'] = analyzer_results
-    
+
     if X_test is None:
         return X_train_encoded
     else:
         X_test_encoded = encoder_model.predict(X_test)
         return X_train_encoded, X_test_encoded
-
-
-
 
 def select_features_for_target(X, target):
     """Select features for a specific target"""
