@@ -136,10 +136,10 @@ class TestResidualOutputFailure:
         expected_file = temp_dir / "residuals_Tg.md"
         assert expected_file.exists()
         
-        # Test for Ridge
+        # Test for LightGBM
         ra.save_cv_results(
             results={'FFV': {'statistics': {'mean': 0.2}}},
-            model_name='ridge'
+            model_name='lightgbm'
         )
         
         expected_file = temp_dir / "residuals_FFV.md"

@@ -8,7 +8,6 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import Ridge
 from sklearn.decomposition import PCA
 import lightgbm as lgb
 from sklearn.metrics import mean_squared_error
@@ -21,7 +20,6 @@ from datetime import datetime
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
 from src.diagnostics import CVDiagnostics
-from config import LIGHTGBM_PARAMS
 from src.residual_analysis import ResidualAnalysisHook, should_run_analysis
 
 # Import SHAP for feature importance
@@ -200,7 +198,7 @@ def update_features_md(feature_importance, features_path=None):
     print(f"Updated {features_path} with feature importance")
 
 
-def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None, calculate_feature_importance=True):
+def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, preprocessed=True, smiles=None, calculate_feature_importance=True):
     """
     Perform cross-validation for separate models approach
     
@@ -211,7 +209,6 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         target_columns: List of target column names
         enable_diagnostics: Enable diagnostic tracking
         random_seed: Random seed for reproducibility
-        model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
         preprocessed: Whether data is already preprocessed (default: True)
         calculate_feature_importance: Whether to calculate SHAP feature importance
     
@@ -349,38 +346,22 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                                 X_val_final = X_val_scaled
                 
                 if len(X_target_final) > 0:
+                    # Train LightGBM model
+                    lgb_params['random_state'] = random_seed  # Override seed for CV
+                    model = lgb.LGBMRegressor(**lgb_params)
                     
-                    # Train model based on type
-                    if model_type == 'lightgbm':
-                        # Use parameters from config for single source of truth
-                        lgb_params = LIGHTGBM_PARAMS.copy()
-                        lgb_params['random_state'] = random_seed  # Override seed for CV
-                        model = lgb.LGBMRegressor(**lgb_params)
-                        
-                        # For LightGBM, create a validation split from training data
-                        from sklearn.model_selection import train_test_split
-                        if len(X_target_final) > 20:  # Only split if we have enough data
-                            X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
-                                X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
-                            )
-                            model.fit(X_tr, y_tr, eval_set=[(X_val_inner, y_val_inner)], eval_metric='mae', callbacks=[lgb.log_evaluation(0)])
-                        else:
-                            model.fit(X_target_final, y_target_complete)
+                    # For LightGBM, create a validation split from training data
+                    from sklearn.model_selection import train_test_split
+                    if len(X_target_final) > 20:  # Only split if we have enough data
+                        X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
+                            X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
+                        )
+                        model.fit(X_tr, y_tr, eval_set=[(X_val_inner, y_val_inner)], eval_metric='mae', callbacks=[lgb.log_evaluation(0)])
                     else:
-                        # Ridge model with target-specific alpha
-                        target_alphas = {
-                            'Tg': 10.0,
-                            'FFV': 1.0,
-                            'Tc': 10.0,
-                            'Density': 5.0,
-                            'Rg': 10.0
-                        }
-                        alpha = target_alphas.get(target, 1.0)
-                        model = Ridge(alpha=alpha, random_state=random_seed)
                         model.fit(X_target_final, y_target_complete)
                     
-                    # Calculate feature importance if requested and using LightGBM
-                    if calculate_feature_importance and model_type == 'lightgbm':
+                    # Calculate feature importance if requested
+                    if calculate_feature_importance:
                         # Create a DataFrame with proper column names for feature importance
                         if preprocessed:
                             # X_target_final is already a DataFrame with column names
@@ -415,16 +396,6 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         features_used = list(X_target_final.columns) if hasattr(X_target_final, 'columns') else [f'feature_{j}' for j in range(X_target_final.shape[1])]
                         # Pass alpha value for diagnostics (use 1.0 for LightGBM as placeholder)
                         alpha_for_diagnostics = 1.0  # Default value for LightGBM
-                        if model_type == 'ridge':
-                            # Get alpha value for Ridge (defined in Ridge model section)
-                            target_alphas = {
-                                'Tg': 10.0,
-                                'FFV': 1.0,
-                                'Tc': 10.0,
-                                'Density': 5.0,
-                                'Rg': 10.0
-                            }
-                            alpha_for_diagnostics = target_alphas.get(target, 1.0)
                         n_train_samples = len(X_target_final) if X_target_final is not None else len(train_mask_complete)
                         n_val_samples = len(X_val_final) if X_val_final is not None else 0
                         cv_diagnostics.track_target_training(
@@ -465,7 +436,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
             residual_hook.analyze_predictions(
                 y_true=y_fold_val,
                 y_pred=fold_pred_df,
-                model_name=f'cv_{model_type}',
+                model_name='cv_lightgbm',
                 fold=fold
             )
             
@@ -497,7 +468,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     y_pred_val=fold_pred_df,
                     train_smiles=train_smiles.tolist() if hasattr(train_smiles, 'tolist') else train_smiles,
                     val_smiles=val_smiles.tolist() if hasattr(val_smiles, 'tolist') else val_smiles,
-                    method=model_type,
+                    method='lightgbm',
                     is_cv=True,
                     fold=fold,
                     seed=random_seed
@@ -575,7 +546,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     return result
 
 
-def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, model_type='lightgbm', preprocessed=True, smiles=None):
+def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, preprocessed=True, smiles=None):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -587,7 +558,6 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
         enable_diagnostics: Enable diagnostic tracking
         seeds: List of random seeds to use (default: [42, 123, 456])
         per_target_analysis: Whether to perform per-target analysis
-        model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
     
     Returns:
         Dictionary with aggregated CV scores across all seeds
@@ -607,11 +577,10 @@ def perform_multi_seed_cv(X, y, cv_folds=5, target_columns=None, enable_diagnost
     
     for seed in seeds:
         print(f"\n--- Running CV with seed {seed} ---")
-        result = perform_cross_validation(X, y, cv_folds=cv_folds, 
+        result = perform_cross_validation(X, y, lgb_params, cv_folds=cv_folds,
                                         target_columns=target_columns, 
                                         enable_diagnostics=enable_diagnostics,
                                         random_seed=seed,
-                                        model_type=model_type,
                                         preprocessed=preprocessed,
                                         smiles=smiles)
         

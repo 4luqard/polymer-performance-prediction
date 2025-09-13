@@ -6,7 +6,6 @@ Uses non-linear gradient boosting to better capture polymer property relationshi
 
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
@@ -61,7 +60,6 @@ if not IS_KAGGLE:
     from src.competition_metric import neurips_polymer_metric
     from src.diagnostics import CVDiagnostics
     from cv import perform_cross_validation, perform_multi_seed_cv
-    from config import LIGHTGBM_PARAMS
     from src.residual_analysis import ResidualAnalysisHook, LightGBMResidualAnalyzer, should_run_analysis
 
 
@@ -102,16 +100,15 @@ else:
 # Target columns
 TARGETS = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
 
-def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
+def main(cv_only=False, use_supplementary=True):
     """
     Main function to train model and make predictions
     
     Args:
         cv_only: If True, only run cross-validation and skip submission generation
         use_supplementary: If True, include supplementary datasets in training
-        model_type: 'ridge' or 'lightgbm' (default: 'lightgbm')
     """
-    print(f"=== Separate {model_type.upper()} Models for Polymer Prediction ===")
+    print(f"=== Separate {'LIGHTGBM'} Models for Polymer Prediction ===")
     
     # Validate dimensionality reduction settings
     dim_reduction_methods = sum([USE_AUTOENCODER, USE_PLS, PCA_VARIANCE_THRESHOLD is not None])
@@ -169,7 +166,24 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
         smiles_test=test_df['SMILES'],
         is_Kaggle=IS_KAGGLE
     )
-    
+
+    # Model parameters
+    lgb_params = {
+        'objective': 'regression_l1',
+        'metric': 'mae',
+        'boosting_type': 'gbdt',
+        'max_depth': -1,
+        'num_leaves': 31,
+        'n_estimators': 200,
+        'learning_rate': 0.1,
+        'feature_fraction': 0.9,
+        'bagging_fraction': 0.8,
+        'bagging_freq': 5,
+        'verbose': -1,
+        'random_state': 42,
+        'n_jobs': -1
+    }
+
     # Run cross-validation if requested (but not on Kaggle)
     if cv_only:
         if IS_KAGGLE:
@@ -186,7 +200,7 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
             multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5, 
                                                      target_columns=target_columns,
                                                      enable_diagnostics=False,
-                                                     model_type=model_type,
+                                                     lgb_params=lgb_params,
                                                      smiles=train_df['SMILES'])
             
             return {
@@ -194,41 +208,9 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
             }
     
     # Train separate models for each target
-    print(f"\n=== Training Separate {model_type.upper()} Models for Each Target ===")
+    print(f"\n=== Training Separate {'LIGHTGBM'} Models for Each Target ===")
     predictions = np.zeros((len(X_test), len(target_columns)))
-    
-    # Model parameters
-    if model_type == 'lightgbm':
-        # Use parameters from config for single source of truth
-        if IS_KAGGLE:
-            # Need to define params inline for Kaggle since we can't import config
-            lgb_params = {
-                'objective': 'regression_l1',
-                'metric': 'mae',
-                'boosting_type': 'gbdt',
-                'max_depth': -1,
-                'num_leaves': 31,
-                'n_estimators': 200,
-                'learning_rate': 0.1,
-                'feature_fraction': 0.9,
-                'bagging_fraction': 0.8,
-                'bagging_freq': 5,
-                'verbose': -1,
-                'random_state': 42,
-                'n_jobs': -1
-            }
-        else:
-            lgb_params = LIGHTGBM_PARAMS.copy()
-    else:
-        # Ridge parameters
-        target_alphas = {
-            'Tg': 10.0,      # Higher regularization for sparse target
-            'FFV': 1.0,      # Lower regularization for dense target
-            'Tc': 10.0,      # Higher regularization for sparse target
-            'Density': 5.0,  # Medium regularization
-            'Rg': 10.0       # Higher regularization for sparse target
-        }
-    
+
     for i, target in enumerate(target_columns):
         print(f"\nTraining model for {target}...")
         
@@ -251,31 +233,24 @@ def main(cv_only=False, use_supplementary=True, model_type='lightgbm'):
             X_test_final = X_test_preprocessed
             
             # Train model for this target
-            if model_type == 'lightgbm':
-                model = lgb.LGBMRegressor(**lgb_params)
-                X_tr, X_val, y_tr, y_val = train_test_split(
-                        X_target_final, y_target, 
-                        test_size=0.15, random_state=42
-                    )
-
-                # Train with validation data to see training progress
-                model.fit(
-                    X_tr, y_tr,
-                    eval_set=[(X_tr, y_tr), (X_val, y_val)],
-                    eval_names=['train', 'valid'],
-                    eval_metric='mae',
-                    callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
+            model = lgb.LGBMRegressor(**lgb_params)
+            X_tr, X_val, y_tr, y_val = train_test_split(
+                    X_target_final, y_target, 
+                    test_size=0.15, random_state=42
                 )
-                # Get final MAE scores from eval results
-                train_mae = model.evals_result_['train']['l1'][-1]
-                val_mae = model.evals_result_['valid']['l1'][-1]
-                print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
-            else:
-                # Use Ridge with target-specific alpha
-                alpha = target_alphas.get(target, 1.0)
-                print(f"  Using alpha={alpha}")
-                model = Ridge(alpha=alpha, random_state=42)
-                model.fit(X_target_final, y_target)
+
+            # Train with validation data to see training progress
+            model.fit(
+                X_tr, y_tr,
+                eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                eval_names=['train', 'valid'],
+                eval_metric='mae',
+                callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
+            )
+            # Get final MAE scores from eval results
+            train_mae = model.evals_result_['train']['l1'][-1]
+            val_mae = model.evals_result_['valid']['l1'][-1]
+            print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
             
             # Make predictions
             predictions[:, i] = model.predict(X_test_final)
@@ -331,12 +306,6 @@ if __name__ == "__main__":
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
     
-    # Check for model type
-    model_type = 'lightgbm'  # default
-    if '--model' in sys.argv:
-        model_idx = sys.argv.index('--model')
-        if model_idx + 1 < len(sys.argv):
-            model_type = sys.argv[model_idx + 1]
 
     # Check for no dimensionality reduction
     if '--no-dim-reduction' in sys.argv:
@@ -345,4 +314,4 @@ if __name__ == "__main__":
         USE_AUTOENCODER = False
         print("No dimensionality reduction will be used")
     
-    main(cv_only=cv_only, use_supplementary=not no_supplement, model_type=model_type)
+    main(cv_only=cv_only, use_supplementary=not no_supplement)
