@@ -942,3 +942,237 @@ def density_estimate(features: dict) -> float:
     density = mol_weight / vdw_vol
     
     return density
+
+def calculate_main_branch_atoms(smiles):
+    """
+    Calculate the number of atoms in the main branch of a polymer.
+    The main branch excludes atoms inside parentheses (branches).
+
+    Examples:
+    *SCCCCC* -> 6 (all carbons and sulfur in main chain)
+    *OCC1C(C1)C* -> 5 (O-C-C-C-C, one C is in branch)
+    *CC(CC)CC* -> 4 (C-C-C-C, CC is a branch)
+    """
+    # Remove polymer end markers for processing
+    clean_smiles = smiles.replace('*', '')
+
+    # Count atoms not in branches (not inside parentheses)
+    main_chain_atoms = 0
+    in_branch = False
+    branch_depth = 0
+
+    i = 0
+    while i < len(clean_smiles):
+        char = clean_smiles[i]
+
+        if char == '(':
+            branch_depth += 1
+            in_branch = True
+            i += 1
+            continue
+        elif char == ')':
+            branch_depth -= 1
+            if branch_depth == 0:
+                in_branch = False
+            i += 1
+            continue
+
+        # Check for two-letter atoms
+        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br']:
+            if not in_branch:
+                main_chain_atoms += 1
+            i += 2
+        elif char in 'CNOSFIPcnos':
+            if not in_branch:
+                main_chain_atoms += 1
+            i += 1
+        else:
+            # Skip bonds, numbers, and other symbols
+            i += 1
+
+    return main_chain_atoms
+
+def calculate_backbone_bonds(smiles):
+    """
+    Calculate the number of bonds in the main backbone of a polymer.
+    The main backbone excludes bonds inside parentheses (branches).
+
+    Examples:
+    *CCCCCC* -> 5 bonds (C-C-C-C-C-C)
+    *CC(C)CC* -> 3 bonds (C-C-C-C, excluding C branch)
+    *CC(=O)CC* -> 3 bonds (C-C-C-C, excluding =O branch)
+    """
+    # Remove polymer end markers for processing
+    clean_smiles = smiles.replace('*', '')
+
+    backbone_bonds = 0
+    in_branch = False
+    branch_depth = 0
+    prev_atom = False
+
+    i = 0
+    while i < len(clean_smiles):
+        char = clean_smiles[i]
+
+        if char == '(':
+            branch_depth += 1
+            in_branch = True
+            prev_atom = False
+            i += 1
+            continue
+        elif char == ')':
+            branch_depth -= 1
+            if branch_depth == 0:
+                in_branch = False
+                # After closing branch, next bond connects to backbone
+                prev_atom = True
+            i += 1
+            continue
+
+        # Skip bonds and numbers when in branch
+        if in_branch:
+            i += 1
+            continue
+
+        # Check for bonds
+        if char in '-=#:':
+            if prev_atom and i + 1 < len(clean_smiles):
+                # Check if next character is an atom
+                next_char = clean_smiles[i + 1]
+                if i + 2 < len(clean_smiles) and clean_smiles[i + 1:i + 3] in ['Cl', 'Br']:
+                    backbone_bonds += 1
+                elif next_char in 'CNOSFIPcnos':
+                    backbone_bonds += 1
+            i += 1
+            continue
+
+        # Check for atoms
+        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br']:
+            if not in_branch:
+                if prev_atom:
+                    # Implicit single bond
+                    backbone_bonds += 1
+                prev_atom = True
+            i += 2
+        elif char in 'CNOSFIPcnos':
+            if not in_branch:
+                if prev_atom and i > 0:
+                    prev_char = clean_smiles[i-1]
+                    # Count implicit bond if no explicit bond symbol
+                    if prev_char not in '-=#:':
+                        backbone_bonds += 1
+                prev_atom = True
+            i += 1
+        else:
+            # Skip other characters (numbers, etc.)
+            i += 1
+
+    return backbone_bonds
+
+def calculate_average_bond_length(smiles):
+    """
+    Calculate the average bond length in Angstroms for a polymer.
+    Uses standard bond lengths for different bond types and atom pairs.
+    """
+    # Standard bond lengths in Angstroms
+    bond_lengths = {
+        ('C', 'C', '-'): 1.54,
+        ('C', 'C', '='): 1.34,
+        ('C', 'C', '#'): 1.20,
+        ('C', 'N', '-'): 1.47,
+        ('C', 'N', '='): 1.29,
+        ('C', 'O', '-'): 1.43,
+        ('C', 'O', '='): 1.23,
+        ('C', 'S', '-'): 1.82,
+        ('C', 'F', '-'): 1.35,
+        ('C', 'Cl', '-'): 1.77,
+        ('C', 'Br', '-'): 1.94,
+        ('C', 'I', '-'): 2.14,
+        ('C', 'P', '-'): 1.84,
+        ('N', 'N', '-'): 1.45,
+        ('N', 'O', '-'): 1.40,
+        ('O', 'O', '-'): 1.48,
+        ('S', 'S', '-'): 2.05,
+        ('c', 'c', ':'): 1.40,  # Aromatic C-C
+        ('c', 'n', ':'): 1.34,  # Aromatic C-N
+        ('c', 'o', ':'): 1.36,  # Aromatic C-O
+        ('c', 's', ':'): 1.71,  # Aromatic C-S
+    }
+
+    # Remove polymer end markers
+    clean_smiles = smiles.replace('*', '')
+
+    # Parse bonds and atoms
+    bond_list = []
+    i = 0
+    prev_atom = None
+    prev_pos = -1
+
+    while i < len(clean_smiles):
+        char = clean_smiles[i]
+
+        # Skip parentheses
+        if char in '()':
+            i += 1
+            continue
+
+        # Skip ring numbers
+        if char in '123456789':
+            i += 1
+            continue
+
+        # Check for two-letter atoms
+        atom = None
+        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br']:
+            atom = clean_smiles[i:i+2]
+            i += 2
+        elif char in 'CNOSFIPcnos':
+            atom = char
+            i += 1
+        elif char in '-=#:':
+            # Explicit bond
+            i += 1
+            continue
+        else:
+            i += 1
+            continue
+
+        if atom and prev_atom:
+            # Determine bond type between prev_atom and current atom
+            bond_type = '-'  # Default single bond
+
+            # Look for explicit bond between prev_pos and current pos
+            for j in range(prev_pos + 1, i - len(atom)):
+                if clean_smiles[j] in '-=#:':
+                    bond_type = clean_smiles[j]
+                    break
+
+            # For aromatic atoms, use aromatic bond
+            if prev_atom.islower() and atom.islower() and prev_atom in 'cnos' and atom in 'cnos':
+                bond_type = ':'
+
+            # Normalize atom names for lookup
+            atom1 = prev_atom.upper() if prev_atom.islower() and prev_atom not in 'cnos' else prev_atom
+            atom2 = atom.upper() if atom.islower() and atom not in 'cnos' else atom
+
+            # Try both orders
+            key1 = (atom1, atom2, bond_type)
+            key2 = (atom2, atom1, bond_type)
+
+            if key1 in bond_lengths:
+                bond_list.append(bond_lengths[key1])
+            elif key2 in bond_lengths:
+                bond_list.append(bond_lengths[key2])
+            else:
+                # Default bond lengths
+                default_lengths = {'-': 1.50, '=': 1.30, '#': 1.20, ':': 1.40}
+                bond_list.append(default_lengths.get(bond_type, 1.50))
+
+        if atom:
+            prev_atom = atom
+            prev_pos = i - len(atom)
+
+    if not bond_list:
+        return 0.0
+
+    return round(sum(bond_list) / len(bond_list), 3)
