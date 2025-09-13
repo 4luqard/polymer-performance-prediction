@@ -791,8 +791,17 @@ def heavy_atom_amount(features: dict) -> int:
     Returns:
         Total count of all heavy atoms
     """
-    # Sum all atoms except hydrogen (H is not in the features dict)
-    return sum(features.values())
+    # Define the available elements in the dataset
+    elements = ['B', 'C', 'N', 'O', 'F', 'Na', 'Si', 'P', 'S',
+                'Cl', 'Ca', 'Ge', 'Se', 'Br', 'Cd', 'Sn', 'Te']
+
+    total = 0
+    for key, value in features.items():
+        # Check if the key is an element
+        if key in elements:
+            total += value
+
+    return total
 
 def heteroatom_amount(features: dict) -> int:
     """
@@ -804,12 +813,16 @@ def heteroatom_amount(features: dict) -> int:
     Returns:
         Total count of all heteroatoms
     """
-    # Sum all atoms except hydrogen and carbon
+    # Define the heteroatoms
+    heteroatoms = ['B', 'N', 'O', 'F', 'Na', 'Si', 'P', 'S',
+                   'Cl', 'Ca', 'Ge', 'Se', 'Br', 'Cd', 'Sn', 'Te']
+
     total = 0
-    for atom, count in features.items():
-        # Skip carbon (both uppercase and lowercase forms)
-        if atom not in ['C', 'c']:
-            total += count
+    for key, value in features.items():
+        # Check if the key is a heteroatom (including bracketed forms)
+        if key in heteroatoms:
+            total += value
+
     return total
 
 def molecular_weight(features: dict) -> float:

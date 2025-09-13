@@ -439,7 +439,7 @@ def prepare_features(df):
 
 
 
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, random_state=42, all_analyzer_results=None):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=256, random_state=42, all_analyzer_results=None):
     """
     Apply supervised encoder for dimensionality reduction.
 
@@ -498,7 +498,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     model.compile(optimizer='adam', loss='mae')
 
     y_train_filled = np.nan_to_num(y_train, nan=0.0)
-    sample_weights = np.where(np.isnan(y_train), 0.5, 1.0)
+    sample_weights = np.where(np.isnan(y_train), 0.0, 1.0)
     sample_weights = np.mean(sample_weights, axis=1 if len(sample_weights.shape) > 1 else 0)
 
     model.fit(

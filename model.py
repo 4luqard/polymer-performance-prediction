@@ -45,7 +45,7 @@ PCA_VARIANCE_THRESHOLD = None#0.99999
 
 # Autoencoder settings - set to True to use autoencoder instead of PCA
 USE_AUTOENCODER = True
-AUTOENCODER_LATENT_DIM = 32  # Number of latent dimensions
+AUTOENCODER_LATENT_DIM = 64  # Number of latent dimensions
 EPOCHS = 20
 
 # PLS settings - set to True to use PLS instead of PCA/autoencoder
