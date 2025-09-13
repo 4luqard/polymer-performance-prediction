@@ -43,6 +43,54 @@ def ignore_warn(*args, **kwargs):
     pass
 warnings.warn = ignore_warn
 
+# Competition metric constants for autoencoder loss
+MINMAX_DICT = {
+    'Tg': [-148.0297376, 472.25],
+    'FFV': [0.2269924, 0.77709707],
+    'Tc': [0.0465, 0.524],
+    'Density': [0.748691234, 1.840998909],
+    'Rg': [9.7283551, 34.672905605],
+}
+
+def create_masked_competition_loss(num_targets):
+    """Create a custom loss function based on the competition metric with masking for missing values."""
+    def masked_competition_loss(y_true, y_pred):
+        import tensorflow as tf
+        
+        # Create mask for non-NaN values (1 where valid, 0 where NaN/-10000.0)
+        mask = tf.cast(tf.not_equal(y_true, -10000.0), tf.float32)
+        
+        # Calculate absolute errors
+        abs_errors = tf.abs(y_pred - y_true)
+        
+        # Scale errors by property ranges
+        target_names = ['Tg', 'FFV', 'Tc', 'Density', 'Rg'][:num_targets]
+        scaled_errors = []
+        
+        for i, prop in enumerate(target_names):
+            if i < num_targets:
+                min_val, max_val = MINMAX_DICT[prop]
+                label_range = max_val - min_val
+                # Scale the error for this property and apply mask
+                scaled_error = abs_errors[:, i] / label_range
+                masked_error = scaled_error * mask[:, i]
+                scaled_errors.append(masked_error)
+        
+        # Stack errors and compute mean per sample
+        if len(scaled_errors) > 0:
+            stacked_errors = tf.stack(scaled_errors, axis=1)
+            # Count valid values per sample
+            valid_counts = tf.reduce_sum(mask, axis=1, keepdims=True)
+            # Avoid division by zero
+            valid_counts = tf.maximum(valid_counts, 1.0)
+            # Mean of valid errors per sample
+            sample_losses = tf.reduce_sum(stacked_errors, axis=1) / tf.squeeze(valid_counts, axis=1)
+            return tf.reduce_mean(sample_losses)
+        else:
+            return tf.constant(0.0)
+    
+    return masked_competition_loss
+
 def calculate_main_branch_atoms(smiles):
     """
     Calculate the number of atoms in the main branch of a polymer.
@@ -516,18 +564,20 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
 
     model = Model(inputs=input_layer, outputs=predictions)
-    model.compile(optimizer='adam', loss='mae')
+    
+    # Use custom loss with masking based on competition metric
+    custom_loss = create_masked_competition_loss(num_targets)
+    model.compile(optimizer='adam', loss=custom_loss)
 
-    y_train_filled = np.nan_to_num(y_train_model, nan=0.0)
-    sample_weights = np.where(np.isnan(y_train_model), 0.0, 1.0)
-    sample_weights = np.mean(sample_weights, axis=1 if len(sample_weights.shape) > 1 else 0)
+    # For the custom loss, we mark NaN values with -10000.0 in y_train
+    # The loss function will handle masking internally
+    y_train_filled = np.nan_to_num(y_train_model, nan=-10000.0)
 
     if enable_residual_analysis:
         # Train without validation_split for residual analysis
         model.fit(
             X_train_model,
             y_train_filled,
-            sample_weight=sample_weights,
             epochs=epochs,
             batch_size=batch_size,
             verbose=1,
@@ -554,7 +604,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         # Add features
         X_all = np.vstack([X_train_split, X_val_split, X_test_split])
         for i in range(X_all.shape[1]):
-            residual_data[f'feature_{i}'] = X_all[:, i]
+            residual_data[list(X_train.columns)[i]] = X_all[:, i]
         
         # Add targets and predictions
         y_all = np.vstack([y_train_split, y_val_split, y_test_split])
@@ -581,7 +631,6 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         model.fit(
             X_train_model,
             y_train_filled,
-            sample_weight=sample_weights,
             epochs=epochs,
             batch_size=batch_size,
             verbose=1,
@@ -651,14 +700,14 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     # Impute missing values with zeros (fit on train, transform both)
     print("Imputing missing values with zeros...")
     imputer = SimpleImputer(strategy='constant', fill_value=0).set_output(transform='pandas')
-    X_train_imputed = X_train #imputer.fit_transform(X_train)
-    X_test_imputed = X_test #imputer.transform(X_test)
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_test_imputed = imputer.transform(X_test)
     
     # Scale features (fit on train, transform both)
     print("Scaling features...")
-    global_scaler = StandardScaler()
-    X_train_scaled = X_train_imputed #global_scaler.fit_transform(X_train_imputed)
-    X_test_scaled = X_test_imputed #global_scaler.transform(X_test_imputed)
+    global_scaler = StandardScaler().set_output(transform='pandas')
+    X_train_scaled = global_scaler.fit_transform(X_train_imputed)
+    X_test_scaled = global_scaler.transform(X_test_imputed)
     
     # Apply dimensionality reduction if enabled
     global_pca = None
