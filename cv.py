@@ -7,8 +7,6 @@ Updated to use LightGBM for better handling of non-linear relationships
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 import lightgbm as lgb
 from sklearn.metrics import mean_squared_error
 import warnings
@@ -29,9 +27,6 @@ try:
 except ImportError:
     SHAP_AVAILABLE = False
     print("Warning: SHAP not available. Feature importance analysis will be skipped.")
-
-# PCA variance threshold - should match the one in model.py
-PCA_VARIANCE_THRESHOLD = None
 
 
 def calculate_shap_importance(model, X, sample_size=100):
@@ -198,27 +193,22 @@ def update_features_md(feature_importance, features_path=None):
     print(f"Updated {features_path} with feature importance")
 
 
-def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, preprocessed=True, smiles=None, calculate_feature_importance=True):
+def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, smiles=None, calculate_feature_importance=True):
     """
     Perform cross-validation for separate models approach
     
     Args:
-        X: Features (numpy array or DataFrame) - should be preprocessed if preprocessed=True
+        X: Features (numpy array or DataFrame)
         y: Targets (DataFrame with multiple columns)
         cv_folds: Number of cross-validation folds
         target_columns: List of target column names
         enable_diagnostics: Enable diagnostic tracking
         random_seed: Random seed for reproducibility
-        preprocessed: Whether data is already preprocessed (default: True)
         calculate_feature_importance: Whether to calculate SHAP feature importance
     
     Returns:
         Dictionary with CV scores
     """
-    # Import select_features_for_target from model only if not preprocessed
-    if not preprocessed:
-        from model import select_features_for_target
-    
     if target_columns is None:
         target_columns = y.columns.tolist()
     
@@ -264,87 +254,22 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
                 # Get samples with valid target values
                 mask_indices = np.where(mask)[0]
                 
-                if preprocessed:
-                    # Use preprocessed data directly
-                    X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
-                    y_target = y_fold_train[target].iloc[mask_indices]
+                X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
+                y_target = y_fold_train[target].iloc[mask_indices]
                     
-                    # Data is already complete and preprocessed
-                    X_target_final = X_target
-                    y_target_complete = y_target
+                X_target_final = X_target
+                y_target_complete = y_target
+
+                val_mask = ~y_fold_val[target].isna()
+                val_mask_indices = np.where(val_mask)[0]
+
+                if len(val_mask_indices) > 0:
+                    X_val_final = X_fold_val.iloc[val_mask_indices] if hasattr(X_fold_val, 'iloc') else X_fold_val[val_mask_indices]
+                    val_complete_indices = val_mask_indices
                 else:
-                    # Select features for this target
-                    X_fold_train_selected = select_features_for_target(X_fold_train, target)
-                    X_fold_val_selected = select_features_for_target(X_fold_val, target)
-                    
-                    X_target = X_fold_train_selected.iloc[mask_indices] if hasattr(X_fold_train_selected, 'iloc') else X_fold_train_selected[mask_indices]
-                    y_target = y_fold_train[target].iloc[mask_indices]
-                    
-                    # Further filter to only keep rows with no missing features
-                    if isinstance(X_target, pd.DataFrame):
-                        feature_complete_mask = ~X_target.isnull().any(axis=1)
-                    else:
-                        # For numpy arrays
-                        feature_complete_mask = ~np.isnan(X_target).any(axis=1)
-                    
-                    X_target_complete = X_target[feature_complete_mask]
-                    y_target_complete = y_target[feature_complete_mask]
-                    
-                    if len(X_target_complete) > 0:
-                        # Scale features (no imputation needed)
-                        scaler = StandardScaler()
-                        X_target_scaled = scaler.fit_transform(X_target_complete)
-                        
-                        # Apply PCA if enabled
-                        pca = None
-                        if PCA_VARIANCE_THRESHOLD is not None:
-                            pca = PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=random_seed)
-                            X_target_pca = pca.fit_transform(X_target_scaled)
-                            X_target_final = X_target_pca
-                        else:
-                            X_target_final = X_target_scaled
-                    
-                if preprocessed:
-                    # For preprocessed data, just filter by target availability
-                    val_mask = ~y_fold_val[target].isna()
-                    val_mask_indices = np.where(val_mask)[0]
-                    
-                    if len(val_mask_indices) > 0:
-                        X_val_final = X_fold_val.iloc[val_mask_indices] if hasattr(X_fold_val, 'iloc') else X_fold_val[val_mask_indices]
-                        val_complete_indices = val_mask_indices
-                    else:
-                        X_val_final = None
-                        val_complete_indices = np.array([])
-                    X_val_complete = None  # Initialize for non-preprocessed case
-                else:
-                    # For non-preprocessed data, apply the same preprocessing as training
-                    val_mask = ~y_fold_val[target].isna()
-                    val_mask_indices = np.where(val_mask)[0]
-                    X_val_complete = None
+                    X_val_final = None
                     val_complete_indices = np.array([])
-                    
-                    if len(val_mask_indices) > 0:
-                        X_val_target = X_fold_val_selected.iloc[val_mask_indices] if hasattr(X_fold_val_selected, 'iloc') else X_fold_val_selected[val_mask_indices]
-                        
-                        # Further filter to only keep rows with no missing features
-                        if isinstance(X_val_target, pd.DataFrame):
-                            val_feature_complete_mask = ~X_val_target.isnull().any(axis=1)
-                        else:
-                            val_feature_complete_mask = ~np.isnan(X_val_target).any(axis=1)
-                        
-                        X_val_complete = X_val_target[val_feature_complete_mask]
-                        val_complete_indices = val_mask_indices[val_feature_complete_mask]
-                        
-                        if len(X_val_complete) > 0:
-                            # Scale validation features
-                            X_val_scaled = scaler.transform(X_val_complete)
-                            
-                            # Apply PCA to validation set if enabled
-                            if pca is not None:
-                                X_val_final = pca.transform(X_val_scaled)
-                            else:
-                                X_val_final = X_val_scaled
-                
+
                 if len(X_target_final) > 0:
                     # Train LightGBM model
                     lgb_params['random_state'] = random_seed  # Override seed for CV
@@ -363,14 +288,9 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
                     # Calculate feature importance if requested
                     if calculate_feature_importance:
                         # Create a DataFrame with proper column names for feature importance
-                        if preprocessed:
-                            # X_target_final is already a DataFrame with column names
-                            feature_df = X_target_final
-                        else:
-                            # Create DataFrame with generic feature names
-                            feature_df = pd.DataFrame(X_target_final, 
-                                                     columns=[f'feature_{j}' for j in range(X_target_final.shape[1])])
-                        
+                        # X_target_final is already a DataFrame with column names
+                        feature_df = X_target_final
+
                         importance = calculate_shap_importance(model, feature_df)
                         if importance:
                             target_feature_importance[target].append(importance)
@@ -379,17 +299,11 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
                     fold_predictions[:, i] = y_fold_train[target].median()
                     
                     # Make predictions only for validation samples with complete features
-                    if preprocessed and len(val_mask_indices) > 0 and X_val_final is not None:
-                        predictions = model.predict(X_val_final)
-                        # Map predictions back to original validation indices
-                        for idx, pred in zip(val_complete_indices, predictions):
-                            fold_predictions[idx, i] = pred
-                    elif not preprocessed and len(val_mask_indices) > 0 and X_val_complete is not None and len(X_val_complete) > 0:
-                        predictions = model.predict(X_val_final)
-                        # Map predictions back to original validation indices
-                        for idx, pred in zip(val_complete_indices, predictions):
-                            fold_predictions[idx, i] = pred
-                    
+                    predictions = model.predict(X_val_final)
+                    # Map predictions back to original validation indices
+                    for idx, pred in zip(val_complete_indices, predictions):
+                        fold_predictions[idx, i] = pred
+
                     # Track target training if diagnostics enabled
                     if cv_diagnostics:
                         # Use X_target_final which is always defined
@@ -546,7 +460,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
     return result
 
 
-def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, preprocessed=True, smiles=None):
+def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, smiles=None):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -581,7 +495,6 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, ena
                                         target_columns=target_columns, 
                                         enable_diagnostics=enable_diagnostics,
                                         random_seed=seed,
-                                        preprocessed=preprocessed,
                                         smiles=smiles)
         
         if result is not None:

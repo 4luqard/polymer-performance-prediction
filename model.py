@@ -11,7 +11,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.decomposition import PCA
 import lightgbm as lgb
 import re
 import sys
@@ -38,19 +37,10 @@ warnings.filterwarnings('ignore')
 # Check if running on Kaggle or locally
 IS_KAGGLE = os.path.exists('/kaggle/input')
 
-# Dimensionality reduction settings (only one method should be enabled at a time)
-# PCA variance threshold - set to None to disable PCA
-PCA_VARIANCE_THRESHOLD = None#0.99999
-
-# Autoencoder settings - set to True to use autoencoder instead of PCA
+# Autoencoder settings
 USE_AUTOENCODER = True
 AUTOENCODER_LATENT_DIM = 64  # Number of latent dimensions
 EPOCHS = 20
-
-# PLS settings - set to True to use PLS instead of PCA/autoencoder
-USE_PLS = False  # Whether to use PLS for dimensionality reduction
-PLS_N_COMPONENTS = 86  # Number of PLS components
-
 
 # Import competition metric and CV functions only if not on Kaggle
 if not IS_KAGGLE:
@@ -106,12 +96,7 @@ def main(cv_only=False, use_supplementary=True):
         use_supplementary: If True, include supplementary datasets in training
     """
     print(f"=== Separate {'LIGHTGBM'} Models for Polymer Prediction ===")
-    
-    # Validate dimensionality reduction settings
-    dim_reduction_methods = sum([USE_AUTOENCODER, USE_PLS, PCA_VARIANCE_THRESHOLD is not None])
-    if dim_reduction_methods > 1:
-        raise ValueError("Only one dimensionality reduction method should be enabled at a time")
-    
+
     # Load competition data using imported function
     train_df, test_df = load_competition_data(
         TRAIN_PATH, TEST_PATH, 
@@ -152,9 +137,6 @@ def main(cv_only=False, use_supplementary=True):
         X_train, X_test, 
         use_autoencoder=USE_AUTOENCODER,
         autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-        pca_variance_threshold=PCA_VARIANCE_THRESHOLD,
-        use_pls=USE_PLS,
-        pls_n_components=PLS_N_COMPONENTS,
         y_train=y_train,
         epochs=EPOCHS,
         is_Kaggle=IS_KAGGLE
@@ -298,13 +280,5 @@ if __name__ == "__main__":
     # Check for command line arguments
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
-    
 
-    # Check for no dimensionality reduction
-    if '--no-dim-reduction' in sys.argv:
-        USE_PLS = False
-        PCA_VARIANCE_THRESHOLD = None
-        USE_AUTOENCODER = False
-        print("No dimensionality reduction will be used")
-    
     main(cv_only=cv_only, use_supplementary=not no_supplement)

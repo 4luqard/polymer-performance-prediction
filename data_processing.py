@@ -14,24 +14,9 @@ import re
 import math
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from tqdm import tqdm
 from extract_features import *
-
-# Import residual analysis if available
-try:
-    from src.residual_analysis import (
-        ResidualAnalysisHook, 
-        PCAResidualAnalyzer,
-        PLSResidualAnalyzer,
-        should_run_analysis
-    )
-except ImportError:
-    # If not available, create dummy functions
-    def should_run_analysis():
-        return False
-    ResidualAnalysisHook = None
 
 import keras
 from keras.models import Sequential, Model
@@ -661,23 +646,19 @@ def select_features_for_target(X, target):
 
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
-                    pca_variance_threshold=None, use_pls=False, pls_n_components=50,
                     y_train=None, epochs=100, is_Kaggle=True):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
     - Imputing missing values
     - Scaling features
-    - Applying dimensionality reduction (PCA, PLS, or autoencoder)
+    - Applying dimensionality reduction (autoencoder)
     
     Args:
         X_train: Training features DataFrame
         X_test: Test features DataFrame
         use_autoencoder: Whether to use autoencoder for dimensionality reduction
         autoencoder_latent_dim: Number of latent dimensions for autoencoder
-        pca_variance_threshold: Variance threshold for PCA (None to disable)
-        use_pls: Whether to use PLS for dimensionality reduction
-        pls_n_components: Number of PLS components
         y_train: Target values DataFrame (required for PLS)
     
     Returns:
@@ -708,97 +689,10 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     X_test_scaled = global_scaler.transform(X_test_imputed)
     
     # Apply dimensionality reduction if enabled
-    global_pca = None
     if use_autoencoder:
         print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train, latent_dim=autoencoder_latent_dim, epochs=epochs, is_Kaggle=is_Kaggle)
-        X_train_preprocessed = pd.DataFrame(X_train_reduced)
-        X_test_preprocessed = pd.DataFrame(X_test_reduced)
-    elif use_pls:
-        if y_train is None:
-            raise ValueError("y_train is required for PLS dimensionality reduction")
-        
-        # Validate number of components
-        max_components = min(X_train_scaled.shape[0], X_train_scaled.shape[1])
-        if pls_n_components > max_components:
-            print(f"WARNING: Requested {pls_n_components} PLS components exceeds maximum ({max_components})")
-            pls_n_components = max_components
-        
-        print(f"Applying PLS: {X_train_scaled.shape[1]} features -> {pls_n_components} components")
-        
-        # Handle missing values in y_train for PLS
-        # Create a mask for samples with at least one non-missing target
-        y_mask = ~y_train.isna().all(axis=1)
-        
-        # Check if we have any samples with targets
-        if not y_mask.any():
-            print("WARNING: No samples with non-missing targets found for PLS fitting.")
-            print("Falling back to PCA for dimensionality reduction.")
-            # Fall back to PCA
-            pca = PCA(n_components=pls_n_components, random_state=42, whiten=True)
-            X_train_reduced = pca.fit_transform(X_train_scaled)
-            X_test_reduced = pca.transform(X_test_scaled)
-            print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
-        else:
-            # Filter data for PLS fitting
-            X_train_pls = X_train_scaled[y_mask]
-            y_train_pls = y_train[y_mask].fillna(y_train[y_mask].mean())
-            
-            # Fit PLS model
-            pls = PLSRegression(n_components=pls_n_components, scale=False)
-            pls.fit(X_train_pls, y_train_pls)
-            
-            # Transform both train and test data
-            X_train_reduced = pls.transform(X_train_scaled)
-            X_test_reduced = pls.transform(X_test_scaled)
-            
-            print(f"PLS fitted on {X_train_pls.shape[0]} samples with non-missing targets")
-            
-            # Run residual analysis if enabled
-            if should_run_analysis() and ResidualAnalysisHook is not None:
-                residual_hook = ResidualAnalysisHook()
-                residual_hook.register_analyzer('pls', PLSResidualAnalyzer())
-                
-                outputs = {
-                    'components': pls.x_loadings_,
-                    'scores': X_train_reduced
-                }
-                
-                analyzer_results = residual_hook.analyze_model_specific('pls', outputs=outputs)
-                if analyzer_results:
-                    print(f"  PLS residual analysis completed")
-                    all_analyzer_results['pls'] = analyzer_results
-        
-        X_train_preprocessed = pd.DataFrame(X_train_reduced, index=X_train.index)
-        X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
-    elif pca_variance_threshold is not None:
-        print(f"Applying PCA with variance threshold {pca_variance_threshold}...")
-        global_pca = PCA(n_components=pca_variance_threshold, random_state=42, whiten=True)
-        X_train_reduced = global_pca.fit_transform(X_train_scaled)
-        X_test_reduced = global_pca.transform(X_test_scaled)
-        print(f"PCA: {X_train_scaled.shape[1]} features -> {X_train_reduced.shape[1]} components")
-        print(f"Variance preserved: {global_pca.explained_variance_ratio_.sum():.4f}")
-        
-        # Run residual analysis if enabled
-        if should_run_analysis() and ResidualAnalysisHook is not None:
-            residual_hook = ResidualAnalysisHook()
-            residual_hook.register_analyzer('pca', PCAResidualAnalyzer())
-            
-            # Get reconstruction for analysis
-            X_train_reconstructed = global_pca.inverse_transform(X_train_reduced)
-            
-            outputs = {
-                'original': X_train_scaled,
-                'transformed': X_train_reduced,
-                'reconstructed': X_train_reconstructed,
-                'explained_variance': global_pca.explained_variance_ratio_
-            }
-            
-            analyzer_results = residual_hook.analyze_model_specific('pca', outputs=outputs)
-            if analyzer_results:
-                print(f"  PCA residual analysis completed")
-                all_analyzer_results['pca'] = analyzer_results
-        
+        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train,
+                                                            latent_dim=autoencoder_latent_dim, epochs=epochs, is_Kaggle=is_Kaggle)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
     else:
@@ -806,17 +700,6 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_test_preprocessed = pd.DataFrame(X_test_scaled, index=X_test.index)
     
     print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
-    
-    
-    # Save all analyzer results if any were collected
-    if all_analyzer_results and should_run_analysis():
-        try:
-            from src.residual_analysis import ResidualAnalysis
-            base_analyzer = ResidualAnalysis()
-            base_analyzer.save_results(all_analyzer_results, "preprocessing_methods")
-            print(f"  Saved preprocessing analyzer results for {list(all_analyzer_results.keys())} methods")
-        except Exception as e:
-            print(f"Warning: Could not save preprocessing analyzer results: {e}")
     
     return X_train_preprocessed, X_test_preprocessed
 
