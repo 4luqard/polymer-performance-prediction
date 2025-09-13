@@ -6,11 +6,7 @@ Uses non-linear gradient boosting to better capture polymer property relationshi
 
 import pandas as pd
 import numpy as np
-from sklearn.multioutput import MultiOutputRegressor
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
-from sklearn.model_selection import cross_val_score, train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
 import lightgbm as lgb
 import re
 import sys
@@ -153,7 +149,6 @@ def main(cv_only=False, use_supplementary=True):
         # Run multi-seed CV with target-specific features (current implementation)
         multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5,
                                                   target_columns=target_columns,
-                                                  enable_diagnostics=False,
                                                   lgb_params=lgb_params,
                                                   smiles=train_df['SMILES'])
             

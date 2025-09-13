@@ -17,7 +17,6 @@ from datetime import datetime
 
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
-from src.diagnostics import CVDiagnostics
 from src.residual_analysis import ResidualAnalysisHook, should_run_analysis
 
 # Import SHAP for feature importance
@@ -26,7 +25,7 @@ import shap
 # Feature importance functions
 from feature_importance import *
 
-def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, smiles=None, calculate_feature_importance=True):
+def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, random_seed=42, smiles=None, calculate_feature_importance=True):
     """
     Perform cross-validation for separate models approach
     
@@ -35,7 +34,6 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
         y: Targets (DataFrame with multiple columns)
         cv_folds: Number of cross-validation folds
         target_columns: List of target column names
-        enable_diagnostics: Enable diagnostic tracking
         random_seed: Random seed for reproducibility
         calculate_feature_importance: Whether to calculate SHAP feature importance
     
@@ -46,13 +44,6 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
         target_columns = y.columns.tolist()
     
     print(f"\n=== Cross-Validation ({cv_folds} folds, seed={random_seed}) ===")
-    
-    # Initialize diagnostics if enabled
-    cv_diagnostics = None
-    if enable_diagnostics:
-        cv_diagnostics = CVDiagnostics()
-        # Track initial feature statistics
-        cv_diagnostics.track_feature_statistics(X)
 
     kf = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
 
@@ -70,10 +61,6 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
         X_fold_val = X.iloc[val_idx] if hasattr(X, 'iloc') else X[val_idx]
         y_fold_train = y.iloc[train_idx]
         y_fold_val = y.iloc[val_idx]
-        
-        # Track data split if diagnostics enabled
-        if cv_diagnostics:
-            cv_diagnostics.track_data_split(fold, train_idx, val_idx, y_fold_train, y_fold_val)
         
         # Predictions for this fold
         fold_predictions = np.zeros((len(val_idx), len(target_columns)))
@@ -137,30 +124,6 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
                     for idx, pred in zip(val_complete_indices, predictions):
                         fold_predictions[idx, i] = pred
 
-                    # Track target training if diagnostics enabled
-                    if cv_diagnostics:
-                        # Use X_target_final which is always defined
-                        features_used = list(X_target_final.columns) if hasattr(X_target_final, 'columns') else [f'feature_{j}' for j in range(X_target_final.shape[1])]
-                        # Pass alpha value for diagnostics (use 1.0 for LightGBM as placeholder)
-                        alpha_for_diagnostics = 1.0  # Default value for LightGBM
-                        n_train_samples = len(X_target_final) if X_target_final is not None else len(train_mask_complete)
-                        n_val_samples = len(X_val_final) if X_val_final is not None else 0
-                        cv_diagnostics.track_target_training(
-                            fold, target, 
-                            n_train_samples, 
-                            n_val_samples,
-                            features_used, 
-                            alpha_for_diagnostics
-                        )
-                    
-                    # Track predictions if diagnostics enabled
-                    if cv_diagnostics and len(val_mask_indices) > 0 and X_val_final is not None and len(X_val_final) > 0:
-                        cv_diagnostics.track_predictions(
-                            fold, target,
-                            val_idx[val_complete_indices],
-                            fold_predictions[val_complete_indices, i],
-                            y_fold_val[target].iloc[val_complete_indices].values
-                        )
                 else:
                     # No complete samples, use median
                     fold_predictions[:, i] = y_fold_train[target].median()
@@ -233,10 +196,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
                         target_fold_scores[target].append(score)
                         print(f"      {target}: {score:.4f}")
             
-            # Track fold score if diagnostics enabled
-            if cv_diagnostics:
-                cv_diagnostics.track_fold_score(fold, fold_score, individual_scores)
-    
+
     cv_mean = np.mean(fold_scores)
     cv_std = np.std(fold_scores)
     
@@ -272,13 +232,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
         
         # Update FEATURES.md
         update_features_md(aggregated_importance)
-    
-    # Finalize diagnostics if enabled
-    if cv_diagnostics:
-        cv_diagnostics.finalize_session(cv_mean, cv_std, fold_scores)
-        report = cv_diagnostics.generate_summary_report()
-        print("\n" + report)
-    
+
     result = {
         'cv_mean': cv_mean,
         'cv_std': cv_std,
@@ -293,7 +247,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
     return result
 
 
-def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, enable_diagnostics=True, seeds=None, per_target_analysis=True, smiles=None):
+def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smiles=None):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -302,16 +256,13 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, ena
         y: Targets (DataFrame with multiple columns)
         cv_folds: Number of cross-validation folds
         target_columns: List of target column names
-        enable_diagnostics: Enable diagnostic tracking
-        seeds: List of random seeds to use (default: [42, 123, 456])
         per_target_analysis: Whether to perform per-target analysis
     
     Returns:
         Dictionary with aggregated CV scores across all seeds
     """
-    if seeds is None:
-        # Use 3 reproducible seeds as requested
-        seeds = [42, 123, 456]
+    # Use 3 reproducible seeds as requested
+    seeds = [42, 123, 456]
     
     print(f"\n=== Multi-Seed Cross-Validation ({len(seeds)} seeds, {cv_folds} folds each) ===")
     print(f"Seeds: {seeds}")
@@ -326,7 +277,6 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, ena
         print(f"\n--- Running CV with seed {seed} ---")
         result = perform_cross_validation(X, y, lgb_params, cv_folds=cv_folds,
                                         target_columns=target_columns, 
-                                        enable_diagnostics=enable_diagnostics,
                                         random_seed=seed,
                                         smiles=smiles)
         
@@ -335,7 +285,7 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, ena
             all_scores.extend(result['fold_scores'])
             
             # Track per-target scores if available
-            if 'target_scores' in result and per_target_analysis:
+            if 'target_scores' in result:
                 for target, scores in result['target_scores'].items():
                     target_scores[target].extend(scores)
     
@@ -351,13 +301,12 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, ena
     print(f"Total folds evaluated: {len(all_scores)}")
     
     # Per-target analysis
-    if per_target_analysis and any(target_scores.values()):
-        print(f"\n=== Per-Target Analysis ===")
-        for target, scores in target_scores.items():
-            if scores:
-                target_mean = np.mean(scores)
-                target_std = np.std(scores)
-                print(f"{target}: {target_mean:.4f} (+/- {target_std:.4f})")
+    print(f"\n=== Per-Target Analysis ===")
+    for target, scores in target_scores.items():
+        if scores:
+            target_mean = np.mean(scores)
+            target_std = np.std(scores)
+            print(f"{target}: {target_mean:.4f} (+/- {target_std:.4f})")
     
     return {
         'overall_mean': overall_mean,
