@@ -202,65 +202,6 @@ def update_features_md(feature_importance, features_path=None):
     print(f"Updated {features_path} with feature importance")
 
 
-def create_newsim_stratified_splits(X, y, cv_folds=5, random_seed=42):
-    """
-    Create custom CV splits where validation sets only contain samples with new_sim == 1
-    
-    Args:
-        X: Features DataFrame (must contain 'new_sim' column)
-        y: Targets DataFrame
-        cv_folds: Number of cross-validation folds
-        random_seed: Random seed for reproducibility
-    
-    Returns:
-        List of (train_idx, val_idx) tuples
-    """
-    np.random.seed(random_seed)
-    
-    # Check if new_sim column exists
-    if 'new_sim' not in X.columns:
-        raise ValueError("X must contain 'new_sim' column for stratified splitting")
-    
-    # Get indices for new_sim samples
-    newsim_mask = X['new_sim'] == 1
-    newsim_indices = np.where(newsim_mask)[0]
-    non_newsim_indices = np.where(~newsim_mask)[0]
-    
-    # Shuffle new_sim indices for random fold assignment
-    newsim_indices_shuffled = newsim_indices.copy()
-    np.random.shuffle(newsim_indices_shuffled)
-    
-    # Calculate fold sizes for new_sim samples
-    n_newsim = len(newsim_indices_shuffled)
-    fold_sizes = np.full(cv_folds, n_newsim // cv_folds)
-    fold_sizes[:n_newsim % cv_folds] += 1
-    
-    # Create folds
-    splits = []
-    current_idx = 0
-    
-    for fold in range(cv_folds):
-        # Validation indices (only from new_sim == 1)
-        val_start = current_idx
-        val_end = current_idx + fold_sizes[fold]
-        val_idx = newsim_indices_shuffled[val_start:val_end]
-        
-        # Training indices (all non-new_sim + remaining new_sim)
-        train_newsim = np.concatenate([
-            newsim_indices_shuffled[:val_start],
-            newsim_indices_shuffled[val_end:]
-        ])
-        train_idx = np.concatenate([non_newsim_indices, train_newsim])
-        
-        # Shuffle training indices
-        np.random.shuffle(train_idx)
-        
-        splits.append((train_idx, val_idx))
-        current_idx = val_end
-    
-    return splits
-
-
 def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagnostics=True, random_seed=42, model_type='lightgbm', preprocessed=True, smiles=None, calculate_feature_importance=True):
     """
     Perform cross-validation for separate models approach
@@ -294,16 +235,9 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
         cv_diagnostics = CVDiagnostics()
         # Track initial feature statistics
         cv_diagnostics.track_feature_statistics(X)
-    
-    # Use custom splitting if new_sim column is present
-    if hasattr(X, 'columns') and 'new_sim' in X.columns:
-        print("Using new_sim stratified splitting (validation only from new_sim == 1)")
-        splits = create_newsim_stratified_splits(X, y, cv_folds=cv_folds, random_seed=random_seed)
-    else:
-        # Fallback to regular KFold
-        kf = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
-        splits = list(kf.split(X))
-    
+
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
+
     # Store scores for each fold and target
     fold_scores = []
     target_fold_scores = {target: [] for target in target_columns}
@@ -311,7 +245,7 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
     # Initialize feature importance tracking
     target_feature_importance = {target: [] for target in target_columns} if calculate_feature_importance else None
     
-    for fold, (train_idx, val_idx) in enumerate(splits):
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
         print(f"\nFold {fold + 1}/{cv_folds}...")
         
         X_fold_train = X.iloc[train_idx] if hasattr(X, 'iloc') else X[train_idx]
@@ -428,9 +362,6 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                         # For LightGBM, create a validation split from training data
                         from sklearn.model_selection import train_test_split
                         if len(X_target_final) > 20:  # Only split if we have enough data
-                            if target in ['FFV', 'Tc']:
-                                #y_target_complete = np.log1p(y_target_complete)
-                                y_target_complete = 1 / (1 + np.exp(-y_target_complete))
                             X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
                                 X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
                             )
@@ -471,9 +402,6 @@ def perform_cross_validation(X, y, cv_folds=5, target_columns=None, enable_diagn
                     # Make predictions only for validation samples with complete features
                     if preprocessed and len(val_mask_indices) > 0 and X_val_final is not None:
                         predictions = model.predict(X_val_final)
-                        if target in ['FFV', 'Tc']:
-                            #predictions = np.expm1(predictions)
-                            predictions = -np.log((1 - predictions) / predictions)
                         # Map predictions back to original validation indices
                         for idx, pred in zip(val_complete_indices, predictions):
                             fold_predictions[idx, i] = pred
