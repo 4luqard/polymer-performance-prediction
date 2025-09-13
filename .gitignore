@@ -225,3 +225,6 @@ residual_results/
 
 # notebooks
 notebooks/
+
+# Submission file
+output/
