@@ -14,13 +14,7 @@ import os
 import math
 
 # Import data processing functions
-from data_processing import (
-    extract_molecular_features,
-    prepare_features,
-    apply_autoencoder,
-    preprocess_data,
-    load_competition_data,
-)
+from data_processing import *
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -168,47 +162,38 @@ def main(cv_only=False, use_supplementary=True):
         n_samples = mask.sum()
         print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
         
-        if n_samples > 0:
-            # Use preprocessed data directly
-            # Use mask.values to avoid index alignment issues
-            X_target = X_train_preprocessed[mask.values]
-            y_target = y_train[target][mask]
+        # Use preprocessed data directly
+        # Use mask.values to avoid index alignment issues
+        X_target = X_train_preprocessed[mask.values]
+        y_target = y_train[target][mask]
             
-            print(f"  Using all {X_target.shape[1]} preprocessed features")
-            print(f"  Training samples: {len(X_target)}")
-            
-            # No need for further preprocessing - data is already scaled and reduced
-            X_target_final = X_target
-            X_test_final = X_test_preprocessed
-            
-            # Train model for this target
-            model = lgb.LGBMRegressor(**lgb_params)
-            X_tr, X_val, y_tr, y_val = train_test_split(
-                    X_target_final, y_target, 
-                    test_size=0.15, random_state=42
-                )
+        print(f"  Using all {X_target.shape[1]} preprocessed features")
+        print(f"  Training samples: {len(X_target)}")
 
-            # Train with validation data to see training progress
-            model.fit(
-                X_tr, y_tr,
-                eval_set=[(X_tr, y_tr), (X_val, y_val)],
-                eval_names=['train', 'valid'],
-                eval_metric='mae',
-                callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
-            )
-            # Get final MAE scores from eval results
-            train_mae = model.evals_result_['train']['l1'][-1]
-            val_mae = model.evals_result_['valid']['l1'][-1]
-            print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
+        # Train model for this target
+        model = lgb.LGBMRegressor(**lgb_params)
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X_target, y_target,
+            test_size=0.15, random_state=42
+        )
+
+        # Train with validation data to see training progress
+        model.fit(
+            X_tr, y_tr,
+            eval_set=[(X_tr, y_tr), (X_val, y_val)],
+            eval_names=['train', 'valid'],
+            eval_metric='mae',
+            callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
+        )
+        # Get final MAE scores from eval results
+        train_mae = model.evals_result_['train']['l1'][-1]
+        val_mae = model.evals_result_['valid']['l1'][-1]
+        print(f"  Final MAE - Train: {train_mae:.4f}, Valid: {val_mae:.4f}")
             
-            # Make predictions
-            predictions[:, i] = model.predict(X_test_final)
-            print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
-        else:
-            # Use median of available values if no samples
-            predictions[:, i] = y_train[target].median()
-            print(f"  No samples available, using median: {predictions[:, i][0]:.4f}")
-    
+        # Make predictions
+        predictions[:, i] = model.predict(X_test_preprocessed)
+        print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+
     # Create submission DataFrame
     submission_df = pd.DataFrame({
         'id': test_df['id'],
