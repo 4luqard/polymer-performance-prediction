@@ -104,15 +104,8 @@ def main(cv_only=False, use_supplementary=True):
         print(f"{col}: median={y_train[col].median():.4f}, mean={y_train[col].mean():.4f}, std={y_train[col].std():.4f}, "
               f"missing={y_train[col].isna().sum()} ({y_train[col].isna().sum()/len(y_train)*100:.1f}%)")
     
-    # Apply preprocessing using imported function
-    X_train_preprocessed, X_test_preprocessed = preprocess_data(
-        X_train, X_test, 
-        use_autoencoder=USE_AUTOENCODER,
-        autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-        y_train=y_train,
-        epochs=EPOCHS,
-        is_Kaggle=IS_KAGGLE
-    )
+    # Note: Preprocessing is now done inside CV or during model training
+    # to ensure consistency with masked samples
 
     # Model parameters
     lgb_params = {
@@ -141,10 +134,14 @@ def main(cv_only=False, use_supplementary=True):
             print("** Running CV WITH supplementary datasets **")
             
         # Run multi-seed CV with target-specific features (current implementation)
-        multi_seed_result = perform_multi_seed_cv(X_train_preprocessed, y_train, cv_folds=5,
-                                                  target_columns=target_columns,
+        multi_seed_result = perform_multi_seed_cv(X_train, y_train, 
                                                   lgb_params=lgb_params,
-                                                  smiles=train_df['SMILES'])
+                                                  cv_folds=5,
+                                                  target_columns=target_columns,
+                                                  smiles=train_df['SMILES'],
+                                                  use_autoencoder=USE_AUTOENCODER,
+                                                  autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
+                                                  epochs=EPOCHS)
             
         return {
             'multi_seed': multi_seed_result
@@ -162,18 +159,29 @@ def main(cv_only=False, use_supplementary=True):
         n_samples = mask.sum()
         print(f"  Available samples: {n_samples} ({n_samples/len(y_train)*100:.1f}%)")
         
-        # Use preprocessed data directly
-        # Use mask.values to avoid index alignment issues
-        X_target = X_train_preprocessed[mask.values]
-        y_target = y_train[target][mask]
+        # Get masked samples
+        mask_indices = np.where(mask)[0]
+        X_target = X_train.iloc[mask_indices]
+        y_target = y_train[target].iloc[mask_indices]
+        
+        # Apply preprocessing on masked samples
+        y_target_df = pd.DataFrame({target: y_target})
+        X_target_preprocessed, X_test_preprocessed = preprocess_data(
+            X_target, X_test,
+            use_autoencoder=USE_AUTOENCODER,
+            autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
+            y_train=y_target_df,
+            epochs=EPOCHS,
+            is_Kaggle=IS_KAGGLE
+        )
             
-        print(f"  Using all {X_target.shape[1]} preprocessed features")
-        print(f"  Training samples: {len(X_target)}")
+        print(f"  Using all {X_target_preprocessed.shape[1]} preprocessed features")
+        print(f"  Training samples: {len(X_target_preprocessed)}")
 
         # Train model for this target
         model = lgb.LGBMRegressor(**lgb_params)
         X_tr, X_val, y_tr, y_val = train_test_split(
-            X_target, y_target,
+            X_target_preprocessed, y_target,
             test_size=0.15, random_state=42
         )
 

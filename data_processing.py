@@ -264,6 +264,8 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         except Exception:
             pass
 
+    verbose = 0 #1 if not is_Kaggle else 0
+
     # Residual analysis: Split data into train/val/test for analysis
     enable_residual_analysis = not is_Kaggle
     
@@ -303,25 +305,21 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     custom_loss = create_masked_competition_loss(num_targets)
     model.compile(optimizer='adam', loss=custom_loss)
 
-    # For the custom loss, we mark NaN values with -10000.0 in y_train
-    # The loss function will handle masking internally
-    y_train_filled = np.nan_to_num(y_train_model, nan=-10000.0)
-
     if enable_residual_analysis:
         # Train without validation_split for residual analysis
         model.fit(
             X_train_model,
-            y_train_filled,
+            y_train_split,
             epochs=epochs,
             batch_size=batch_size,
-            verbose=1,
+            verbose=verbose,
             validation_data=(X_val_split, np.nan_to_num(y_val_split, nan=0.0))
         )
         
         # Compute residuals for all splits
-        train_pred = model.predict(X_train_split)
-        val_pred = model.predict(X_val_split)  
-        test_pred = model.predict(X_test_split)
+        train_pred = model.predict(X_train_split, verbose=verbose)
+        val_pred = model.predict(X_val_split, verbose=verbose)
+        test_pred = model.predict(X_test_split, verbose=verbose)
         
         # Calculate residuals (only for non-NaN values)
         train_residuals = np.where(np.isnan(y_train_split), np.nan, train_pred - y_train_split)
@@ -356,29 +354,29 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
         residual_df = pd.DataFrame(residual_data)
         output_path = 'autoencoder_residuals.parquet'
         residual_df.to_parquet(output_path, index=False)
-        print(f"Residual analysis saved to {output_path}")
-        print(f"Shape: {residual_df.shape}")
-        print(f"Splits: train={len(X_train_split)}, val={len(X_val_split)}, test={len(X_test_split)}")
+        # print(f"Residual analysis saved to {output_path}")
+        # print(f"Shape: {residual_df.shape}")
+        # print(f"Splits: train={len(X_train_split)}, val={len(X_val_split)}, test={len(X_test_split)}")
         
     else:
         # Original training with validation_split
         model.fit(
             X_train_model,
-            y_train_filled,
+            y_train_model,
             epochs=epochs,
             batch_size=batch_size,
-            verbose=1,
+            verbose=verbose,
             validation_split=0.20
         )
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
 
-    X_train_encoded = encoder_model.predict(X_train)
+    X_train_encoded = encoder_model.predict(X_train, verbose=verbose)
 
     if X_test is None:
         return X_train_encoded
     else:
-        X_test_encoded = encoder_model.predict(X_test)
+        X_test_encoded = encoder_model.predict(X_test, verbose=verbose)
         return X_train_encoded, X_test_encoded
 
 
@@ -401,7 +399,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     Returns:
         Tuple of (X_train_preprocessed, X_test_preprocessed)
     """
-    print("\n=== Preprocessing Data ===")
+    # print("\n=== Preprocessing Data ===")
     
     # Collection for all analyzer results from preprocessing methods
     all_analyzer_results = {}
@@ -409,25 +407,25 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     # Drop columns with all NaN values in training data
     nan_cols = X_train.columns[X_train.isna().all()]
     if len(nan_cols) > 0:
-        print(f"Dropping {len(nan_cols)} columns with all NaN values")
+        # print(f"Dropping {len(nan_cols)} columns with all NaN values")
         X_train = X_train.drop(columns=nan_cols)
         X_test = X_test.drop(columns=nan_cols)
     
     # Impute missing values with zeros (fit on train, transform both)
-    print("Imputing missing values with zeros...")
+    # print("Imputing missing values with zeros...")
     imputer = SimpleImputer(strategy='constant', fill_value=0).set_output(transform='pandas')
     X_train_imputed = imputer.fit_transform(X_train)
     X_test_imputed = imputer.transform(X_test)
     
     # Scale features (fit on train, transform both)
-    print("Scaling features...")
+    # print("Scaling features...")
     global_scaler = StandardScaler().set_output(transform='pandas')
     X_train_scaled = global_scaler.fit_transform(X_train_imputed)
     X_test_scaled = global_scaler.transform(X_test_imputed)
     
     # Apply dimensionality reduction if enabled
     if use_autoencoder:
-        print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
+        # print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
         X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train,
                                                             latent_dim=autoencoder_latent_dim, epochs=epochs, is_Kaggle=is_Kaggle)
         X_train_preprocessed = pd.DataFrame(X_train_reduced)
@@ -436,7 +434,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         X_train_preprocessed = pd.DataFrame(X_train_scaled, index=X_train.index)
         X_test_preprocessed = pd.DataFrame(X_test_scaled, index=X_test.index)
     
-    print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
+    # print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
     
     return X_train_preprocessed, X_test_preprocessed
 

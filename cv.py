@@ -24,7 +24,11 @@ import shap
 # Feature importance functions
 from feature_importance import *
 
-def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, random_seed=42, smiles=None):
+# Import preprocessing function
+from data_processing import preprocess_data
+
+def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, random_seed=42, smiles=None,
+                           use_autoencoder=False, autoencoder_latent_dim=30, epochs=100):
     """
     Perform cross-validation for separate models approach
     
@@ -74,14 +78,23 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
 
             X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
             y_target = y_fold_train[target].iloc[mask_indices]
-                    
-            X_target_final = X_target
-            y_target_complete = y_target
 
             val_mask = ~y_fold_val[target].isna()
             val_mask_indices = np.where(val_mask)[0]
+            X_val_masked = X_fold_val.iloc[val_mask_indices] if hasattr(X_fold_val, 'iloc') else X_fold_val[val_mask_indices]
 
-            X_val_final = X_fold_val.iloc[val_mask_indices] if hasattr(X_fold_val, 'iloc') else X_fold_val[val_mask_indices]
+            # Apply preprocessing on masked samples
+            y_target_df = pd.DataFrame({target: y_target})
+            X_target_final, X_val_final = preprocess_data(
+                X_target, X_val_masked,
+                use_autoencoder=use_autoencoder,
+                autoencoder_latent_dim=autoencoder_latent_dim,
+                y_train=y_target_df,
+                epochs=epochs,
+                is_Kaggle=False
+            )
+            
+            y_target_complete = y_target
             val_complete_indices = val_mask_indices
             # =======================================================================
             # Target masking
@@ -201,7 +214,8 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
     return result
 
 
-def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smiles=None):
+def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smiles=None,
+                         use_autoencoder=False, autoencoder_latent_dim=30, epochs=100):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -234,7 +248,10 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smi
         result = perform_cross_validation(X, y, lgb_params, cv_folds=cv_folds,
                                         target_columns=target_columns, 
                                         random_seed=seed,
-                                        smiles=smiles)
+                                        smiles=smiles,
+                                        use_autoencoder=use_autoencoder,
+                                        autoencoder_latent_dim=autoencoder_latent_dim,
+                                        epochs=epochs)
         
         if result is not None:
             seed_results[seed] = result
