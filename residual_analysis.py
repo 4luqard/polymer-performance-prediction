@@ -56,7 +56,7 @@ def residual_analysis(
     # Train without validation_split for residual analysis
     model.fit(
         X_train_split,
-        y_train_split,
+        [X_train_split, y_train_split],
         epochs=epochs,
         batch_size=batch_size,
         verbose=verbose,

@@ -25,8 +25,8 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 
 # Autoencoder settings
 USE_AUTOENCODER = True
-AUTOENCODER_LATENT_DIM = 64  # Number of latent dimensions
-EPOCHS = 20
+AUTOENCODER_LATENT_DIM = 32  # Number of latent dimensions
+EPOCHS = 25
 
 # Set paths based on environment
 if IS_KAGGLE:
@@ -80,12 +80,12 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
     # Extract features
     print("\nExtracting features from training data...")
     X_train = prepare_features(train_df)
-    
+
     print("\nExtracting features from test data...")
     X_test = prepare_features(test_df)
-    
     # Prepare target variables
     target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+
     y_train = train_df[target_columns]
     
     # Print feature statistics
@@ -137,7 +137,7 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
         # Run multi-seed CV with target-specific features (current implementation)
         multi_seed_result = perform_multi_seed_cv(X_train, y_train, 
                                                   lgb_params=lgb_params,
-                                                  cv_folds=5,
+                                                  cv_folds=3,
                                                   target_columns=target_columns,
                                                   smiles=train_df['SMILES'],
                                                   use_autoencoder=USE_AUTOENCODER,

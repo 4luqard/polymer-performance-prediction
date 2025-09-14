@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from rich import print
+from sklearn.metrics import mean_absolute_error
 
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
@@ -58,8 +59,8 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
     for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
         print(f"\nFold {fold + 1}/{cv_folds}...")
         
-        X_fold_train = X.iloc[train_idx] if hasattr(X, 'iloc') else X[train_idx]
-        X_fold_val = X.iloc[val_idx] if hasattr(X, 'iloc') else X[val_idx]
+        X_fold_train = X.iloc[train_idx]
+        X_fold_val = X.iloc[val_idx]
         y_fold_train = y.iloc[train_idx]
         y_fold_val = y.iloc[val_idx]
         
@@ -77,12 +78,12 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
             # Get samples with valid target values
             mask_indices = np.where(mask)[0]
 
-            X_target = X_fold_train.iloc[mask_indices] if hasattr(X_fold_train, 'iloc') else X_fold_train[mask_indices]
+            X_target = X_fold_train.iloc[mask_indices]
             y_target = y_fold_train[target].iloc[mask_indices]
 
             val_mask = ~y_fold_val[target].isna()
             val_mask_indices = np.where(val_mask)[0]
-            X_val_masked = X_fold_val.iloc[val_mask_indices] if hasattr(X_fold_val, 'iloc') else X_fold_val[val_mask_indices]
+            X_val_masked = X_fold_val.iloc[val_mask_indices]
 
             # Apply preprocessing on masked samples
             y_target_df = pd.DataFrame({target: y_target})

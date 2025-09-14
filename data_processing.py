@@ -19,9 +19,37 @@ from rich import print
 from extract_features import *
 from residual_analysis import *
 
+from rich import console
+from sklearn.metrics import auc, confusion_matrix, precision_recall_curve
+
+console = console.Console(width=120)
+from datetime import datetime
+
+from rich.jupyter import print as show
+
+# from cache import GlobalCache
+
+# try:
+#     None in global_cache.cache
+# except Exception:
+#     # del plot_cache
+#     global_cache = GlobalCache()
+
+def instrument(fn):
+    def tracked_fn(*args, **kwargs):
+        before = datetime.now()
+        results = fn(*args, **kwargs)
+        console.log(f"[bold]{fn.__name__}[/bold] took {datetime.now() - before}")
+        return results
+
+    return tracked_fn
+
+
 import keras
+from keras.optimizers import Adam
 from keras.models import Sequential, Model
-from keras.layers import Dense, Input
+from keras.layers import Dense, Input, Dropout, LayerNormalization
+from keras.layers import BatchNormalization as BN
 
 import warnings
 def ignore_warn(*args, **kwargs):
@@ -147,7 +175,7 @@ def extract_molecular_features(smiles, rpt):
     # features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
     # features['flexibility_score'] = features['rotatable_bond_estimate'] / max(features['heavy_atom_count'], 1)
 
-    # Size and complexit2.326e-23y
+    # Size and complexity
     features['molecular_complexity'] = (features['num_rings'] + features['num_branches'] + 
                                        features['num_tetrahedral_carbon'])
     
@@ -222,8 +250,8 @@ def prepare_features(df):
     return features_df
 
 
-
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=256, random_state=42, is_Kaggle=True):
+@instrument
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, random_state=42, is_Kaggle=True):
     """
     Apply supervised encoder for dimensionality reduction.
 
@@ -253,64 +281,92 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     random.seed(random_state)
     os.environ['PYTHONHASHSEED'] = str(random_state)
 
-    try:
-        import tensorflow as tf
-        tf.random.set_seed(random_state)
-        if hasattr(tf, 'set_random_seed'):
-            tf.set_random_seed(random_state)
-    except ImportError:
-        try:
-            import keras.backend as K
-            if hasattr(K, 'set_random_seed'):
-                K.set_random_seed(random_state)
-        except Exception:
-            pass
+    import tensorflow as tf
+    tf.random.set_seed(random_state)
+    if hasattr(tf, 'set_random_seed'):
+        tf.set_random_seed(random_state)
 
-    verbose = 0 #1 if not is_Kaggle else 0
+    verbose = 1 if not is_Kaggle else 0
 
     enable_residual_analysis = not is_Kaggle
 
+    latent_dim = 32
+
     input_dim = X_train.shape[1]
     encoder = Sequential([
-        Dense(int(latent_dim), activation='linear', input_shape=(input_dim,)),
-        # Dense(int(latent_dim+(input_dim-latent_dim)/3), activation='tanh'),
+        # BN(),
+        # LayerNormalization(),
+        Dense(latent_dim*8, activation='leaky_relu', input_shape=(input_dim,)),
+        Dropout(0.2),
+        Dense(latent_dim*4, activation='leaky_relu', input_shape=(input_dim,)),
+        Dropout(0.2),
+        Dense(latent_dim*2, activation='leaky_relu'),
+        Dropout(0.2),
+        # BN(),
+        Dense(latent_dim, activation='linear'),
         # Dense(latent_dim, activation='linear')
     ])
 
+    decoder = Sequential([
+        # BN(),
+        Dense(latent_dim*2, activation='leaky_relu', input_shape=(latent_dim,)),
+        Dropout(0.2),
+        Dense(latent_dim*4, activation='leaky_relu'),
+        Dropout(0.2),
+        Dense(latent_dim*8, activation='leaky_relu'),
+        Dropout(0.2),
+        # BN(),
+        Dense(input_dim, activation='linear'),
+        # Dense(latent_dim, activation='linear')
+    ], name='decoded')
+
     input_layer = Input(shape=(input_dim,))
     encoded = encoder(input_layer)
+    decoded = decoder(encoded)
 
-    num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
-    predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
+    predictions = Sequential([
+        # BN(),
+        Dense(int(latent_dim/4), activation='leaky_relu', input_shape=(latent_dim,)),
+        # BN(),
+        Dense(input_dim, activation='linear')
+    ], name="predictions")
+    predictions = predictions(encoded)
 
-    model = Model(inputs=input_layer, outputs=predictions)
+    model = Model(inputs=input_layer, outputs=[decoded, predictions])
     
     # Use custom loss with masking based on competition metric
-    custom_loss = create_masked_competition_loss(num_targets)
-    model.compile(optimizer='adam', loss=custom_loss)
+    # XXX DO NOT TOUCH THE LEARNING RATE
+    model.compile(optimizer=Adam(learning_rate=3e-4), loss={"decoded": 'mse', "predictions": 'mae'})
 
-    if enable_residual_analysis:
-        # Train without validation_split for residual analysis
-        residual_analysis(
-            model,
-            X_train,
-            y_train,
-            batch_size,
-            epochs,
-            random_state,
-            verbose,
-        )
+    @instrument
+    def train_autoencoder():
+        if False: #enable_residual_analysis:
+            # Train without validation_split for residual analysis
+            residual_analysis(
+                model,
+                X_train,
+                y_train,
+                batch_size,
+                epochs,
+                random_state,
+                verbose,
+            )
 
-    else:
-        # Original training with validation_split
-        model.fit(
-            X_train,
-            y_train,
-            epochs=epochs,
-            batch_size=batch_size,
-            verbose=verbose,
-            validation_split=0.20,
-        )
+        else:
+            # Original training with validation_split
+            model.fit(
+                X_train,
+                [X_train, y_train],
+                epochs=epochs,
+                batch_size=batch_size,
+                verbose=verbose,
+                validation_split=0.1,
+            )
+        return model
+    model = train_autoencoder()
+
+    # X_train_preds = model.predict(X_train, verbose=verbose)
+    # assert False
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
 
