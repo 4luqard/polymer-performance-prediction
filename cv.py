@@ -14,6 +14,7 @@ warnings.filterwarnings('ignore')
 import json
 from pathlib import Path
 from datetime import datetime
+from rich import print
 
 # These imports are conditional based on the main model.py imports
 from src.competition_metric import neurips_polymer_metric
@@ -215,7 +216,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
 
 
 def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smiles=None,
-                         use_autoencoder=False, autoencoder_latent_dim=30, epochs=100):
+                          use_autoencoder=False, autoencoder_latent_dim=30, epochs=100, seeds=[42, 123, 456]):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -228,9 +229,6 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smi
     Returns:
         Dictionary with aggregated CV scores across all seeds
     """
-    # Use 3 reproducible seeds as requested
-    seeds = [42, 123, 456]
-    
     print(f"\n=== Multi-Seed Cross-Validation ({len(seeds)} seeds, {cv_folds} folds each) ===")
     print(f"Seeds: {seeds}")
 

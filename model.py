@@ -12,6 +12,7 @@ import re
 import sys
 import os
 import math
+from rich import print
 
 # Import data processing functions
 from data_processing import *
@@ -59,7 +60,7 @@ else:
         'data/raw/extra_datasets/tg_density.csv'
     ]
 
-def main(cv_only=False, use_supplementary=True):
+def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
     """
     Main function to train model and make predictions
     
@@ -141,7 +142,8 @@ def main(cv_only=False, use_supplementary=True):
                                                   smiles=train_df['SMILES'],
                                                   use_autoencoder=USE_AUTOENCODER,
                                                   autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-                                                  epochs=EPOCHS)
+                                                  epochs=EPOCHS,
+                                                  seeds=seeds)
             
         return {
             'multi_seed': multi_seed_result
@@ -230,5 +232,6 @@ if __name__ == "__main__":
     # Check for command line arguments
     cv_only = '--cv-only' in sys.argv or '--cv' in sys.argv
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
+    seeds = [456] if '--s' in sys.argv else [42, 123, 456]
 
-    main(cv_only=cv_only, use_supplementary=not no_supplement)
+    main(cv_only=cv_only, seeds=seeds, use_supplementary=not no_supplement)

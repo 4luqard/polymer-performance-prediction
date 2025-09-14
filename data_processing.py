@@ -15,7 +15,9 @@ import math
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from tqdm import tqdm
+from rich import print
 from extract_features import *
+from residual_analysis import *
 
 import keras
 from keras.models import Sequential, Model
@@ -266,25 +268,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
 
     verbose = 0 #1 if not is_Kaggle else 0
 
-    # Residual analysis: Split data into train/val/test for analysis
     enable_residual_analysis = not is_Kaggle
-    
-    if enable_residual_analysis:
-        # Create train/val/test split for residual analysis
-        X_train_split, X_temp, y_train_split, y_temp = train_test_split(
-            X_train, y_train, test_size=0.3, random_state=random_state
-        )
-        X_val_split, X_test_split, y_val_split, y_test_split = train_test_split(
-            X_temp, y_temp, test_size=0.30, random_state=random_state
-        )
-        
-        # Use the split data for training
-        X_train_model = X_train_split
-        y_train_model = y_train_split
-    else:
-        # Use original approach
-        X_train_model = X_train
-        y_train_model = y_train
 
     input_dim = X_train.shape[1]
     encoder = Sequential([
@@ -296,7 +280,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     input_layer = Input(shape=(input_dim,))
     encoded = encoder(input_layer)
 
-    num_targets = y_train_model.shape[1] if len(y_train_model.shape) > 1 else 1
+    num_targets = y_train.shape[1] if len(y_train.shape) > 1 else 1
     predictions = Dense(num_targets, activation='linear', name='predictions')(encoded)
 
     model = Model(inputs=input_layer, outputs=predictions)
@@ -307,66 +291,25 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
 
     if enable_residual_analysis:
         # Train without validation_split for residual analysis
-        model.fit(
-            X_train_model,
-            y_train_split,
-            epochs=epochs,
-            batch_size=batch_size,
-            verbose=verbose,
-            validation_data=(X_val_split, np.nan_to_num(y_val_split, nan=0.0))
+        residual_analysis(
+            model,
+            X_train,
+            y_train,
+            batch_size,
+            epochs,
+            random_state,
+            verbose,
         )
-        
-        # Compute residuals for all splits
-        train_pred = model.predict(X_train_split, verbose=verbose)
-        val_pred = model.predict(X_val_split, verbose=verbose)
-        test_pred = model.predict(X_test_split, verbose=verbose)
-        
-        # Calculate residuals (only for non-NaN values)
-        train_residuals = np.where(np.isnan(y_train_split), np.nan, train_pred - y_train_split)
-        val_residuals = np.where(np.isnan(y_val_split), np.nan, val_pred - y_val_split)
-        test_residuals = np.where(np.isnan(y_test_split), np.nan, test_pred - y_test_split)
-        
-        # Create DataFrame with all information
-        residual_data = {
-            'split': (['train'] * len(X_train_split) + 
-                     ['val'] * len(X_val_split) + 
-                     ['test'] * len(X_test_split))
-        }
-        
-        # Add features
-        X_all = np.vstack([X_train_split, X_val_split, X_test_split])
-        for i in range(X_all.shape[1]):
-            residual_data[list(X_train.columns)[i]] = X_all[:, i]
-        
-        # Add targets and predictions
-        y_all = np.vstack([y_train_split, y_val_split, y_test_split])
-        pred_all = np.vstack([train_pred, val_pred, test_pred])
-        residuals_all = np.vstack([train_residuals, val_residuals, test_residuals])
-        
-        target_names = ['Tg', 'FFV', 'Tc', 'Density', 'Rg'] if num_targets == 5 else [f'target_{i}' for i in range(num_targets)]
-        
-        for i, name in enumerate(target_names[:num_targets]):
-            residual_data[f'{name}_actual'] = y_all[:, i]
-            residual_data[f'{name}_pred'] = pred_all[:, i]
-            residual_data[f'{name}_residual'] = residuals_all[:, i]
-        
-        # Save to parquet
-        residual_df = pd.DataFrame(residual_data)
-        output_path = 'autoencoder_residuals.parquet'
-        residual_df.to_parquet(output_path, index=False)
-        # print(f"Residual analysis saved to {output_path}")
-        # print(f"Shape: {residual_df.shape}")
-        # print(f"Splits: train={len(X_train_split)}, val={len(X_val_split)}, test={len(X_test_split)}")
-        
+
     else:
         # Original training with validation_split
         model.fit(
-            X_train_model,
-            y_train_model,
+            X_train,
+            y_train,
             epochs=epochs,
             batch_size=batch_size,
             verbose=verbose,
-            validation_split=0.20
+            validation_split=0.20,
         )
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
