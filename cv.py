@@ -85,18 +85,21 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
             val_mask_indices = np.where(val_mask)[0]
             X_val_masked = X_fold_val.iloc[val_mask_indices]
 
+            X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
+                X_target, y_target, test_size=0.15, random_state=random_seed
+            )
+
             # Apply preprocessing on masked samples
-            y_target_df = pd.DataFrame({target: y_target})
-            X_target_final, X_val_final = preprocess_data(
-                X_target, X_val_masked,
+            y_tr_df = pd.DataFrame({target: y_tr})
+            y_val_df = pd.DataFrame({target: y_val_inner})
+            X_tr_final, X_val_final, X_test_final = preprocess_data(
+                [X_tr, X_val_inner], X_val_masked,
                 use_autoencoder=use_autoencoder,
                 autoencoder_latent_dim=autoencoder_latent_dim,
-                y_train=y_target_df,
-                epochs=epochs,
-                is_Kaggle=False
+                y_train=[y_tr_df, y_val_df],
+                epochs=epochs
             )
             
-            y_target_complete = y_target
             val_complete_indices = val_mask_indices
             # =======================================================================
             # Target masking
@@ -108,15 +111,14 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
             lgb_params['random_state'] = random_seed  # Override seed for CV
             model = lgb.LGBMRegressor(**lgb_params)
                     
-            # For LightGBM, create a validation split from training data
-            X_tr, X_val_inner, y_tr, y_val_inner = train_test_split(
-                X_target_final, y_target_complete, test_size=0.15, random_state=random_seed
-            )
-            model.fit(X_tr, y_tr, eval_set=[(X_val_inner, y_val_inner)], eval_metric='mae', callbacks=[lgb.log_evaluation(0)])
+            model.fit(X_tr_final, y_tr,
+                      eval_set=[(X_val_final, y_val_inner)],
+                      eval_metric='mae',
+                      callbacks=[lgb.log_evaluation(0)])
 
             # Create a DataFrame with proper column names for feature importance
             # X_target_final is already a DataFrame with column names
-            feature_df = X_target_final
+            feature_df = X_tr_final
 
             importance = calculate_shap_importance(model, feature_df)
             if importance:
@@ -126,7 +128,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
             fold_predictions[:, i] = y_fold_train[target].median()
                     
             # Make predictions only for validation samples with complete features
-            predictions = model.predict(X_val_final)
+            predictions = model.predict(X_test_final)
             # Map predictions back to original validation indices
             for idx, pred in zip(val_complete_indices, predictions):
                 fold_predictions[idx, i] = pred

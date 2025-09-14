@@ -165,32 +165,34 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
         mask_indices = np.where(mask)[0]
         X_target = X_train.iloc[mask_indices]
         y_target = y_train[target].iloc[mask_indices]
-        
-        # Apply preprocessing on masked samples
-        y_target_df = pd.DataFrame({target: y_target})
-        X_target_preprocessed, X_test_preprocessed = preprocess_data(
-            X_target, X_test,
-            use_autoencoder=USE_AUTOENCODER,
-            autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-            y_train=y_target_df,
-            epochs=EPOCHS,
-            is_Kaggle=IS_KAGGLE
-        )
-            
-        print(f"  Using all {X_target_preprocessed.shape[1]} preprocessed features")
-        print(f"  Training samples: {len(X_target_preprocessed)}")
 
-        # Train model for this target
-        model = lgb.LGBMRegressor(**lgb_params)
         X_tr, X_val, y_tr, y_val = train_test_split(
-            X_target_preprocessed, y_target,
+            X_target, y_target,
             test_size=0.15, random_state=42
         )
 
+        # Apply preprocessing on masked samples
+        y_tr_df = pd.DataFrame({target: y_tr})
+        y_val_df = pd.DataFrame({target: y_val})
+        X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed = preprocess_data(
+            [X_tr, X_val], X_test,
+            use_autoencoder=USE_AUTOENCODER,
+            autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
+            y_train=[y_tr_df, y_val_df],
+            epochs=EPOCHS
+        )
+            
+        print(f"  Using all {X_tr_preprocessed.shape[1]} preprocessed features")
+        print(f"  Training samples: {len(X_tr_preprocessed)}")
+        print(f"  Validation samples: {len(X_val_preprocessed)}")
+
+        # Train model for this target
+        model = lgb.LGBMRegressor(**lgb_params)
+
         # Train with validation data to see training progress
         model.fit(
-            X_tr, y_tr,
-            eval_set=[(X_tr, y_tr), (X_val, y_val)],
+            X_tr_preprocessed, y_tr,
+            eval_set=[(X_tr_preprocessed, y_tr), (X_val_preprocessed, y_val)],
             eval_names=['train', 'valid'],
             eval_metric='mae',
             callbacks=[lgb.log_evaluation(0)]  # Disable verbose output

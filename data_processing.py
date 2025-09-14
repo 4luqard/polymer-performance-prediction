@@ -17,7 +17,6 @@ from sklearn.impute import SimpleImputer
 from tqdm import tqdm
 from rich import print
 from extract_features import *
-from residual_analysis import *
 
 from rich import console
 from sklearn.metrics import auc, confusion_matrix, precision_recall_curve
@@ -26,14 +25,6 @@ console = console.Console(width=120)
 from datetime import datetime
 
 from rich.jupyter import print as show
-
-# from cache import GlobalCache
-
-# try:
-#     None in global_cache.cache
-# except Exception:
-#     # del plot_cache
-#     global_cache = GlobalCache()
 
 def instrument(fn):
     def tracked_fn(*args, **kwargs):
@@ -251,7 +242,7 @@ def prepare_features(df):
 
 
 @instrument
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, random_state=42, is_Kaggle=True):
+def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, random_state=42):
     """
     Apply supervised encoder for dimensionality reduction.
 
@@ -274,7 +265,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     import os
     from sklearn.model_selection import train_test_split
 
-    if y_train is None:
+    if y_train[0] is None or y_train[1] is None:
         raise ValueError("y_train must be provided for supervised autoencoder")
 
     np.random.seed(random_state)
@@ -286,13 +277,10 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     if hasattr(tf, 'set_random_seed'):
         tf.set_random_seed(random_state)
 
-    verbose = 1 if not is_Kaggle else 0
-
-    enable_residual_analysis = not is_Kaggle
-
+    verbose = 1
     latent_dim = 32
 
-    input_dim = X_train.shape[1]
+    input_dim = X_train[0].shape[1]
     encoder = Sequential([
         # BN(),
         # LayerNormalization(),
@@ -335,52 +323,31 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     model = Model(inputs=input_layer, outputs=[decoded, predictions])
     
     # Use custom loss with masking based on competition metric
-    # XXX DO NOT TOUCH THE LEARNING RATE
     model.compile(optimizer=Adam(learning_rate=3e-4), loss={"decoded": 'mse', "predictions": 'mae'})
 
-    @instrument
-    def train_autoencoder():
-        if False: #enable_residual_analysis:
-            # Train without validation_split for residual analysis
-            residual_analysis(
-                model,
-                X_train,
-                y_train,
-                batch_size,
-                epochs,
-                random_state,
-                verbose,
-            )
+    # Original training with validation_split
+    model.fit(
+        X_train[0],
+        [X_train[0], y_train[0]],
+        epochs=epochs,
+        batch_size=batch_size,
+        verbose=verbose,
+        validation_data=(X_train[1], [X_train[1], y_train[1]])
+    )
 
-        else:
-            # Original training with validation_split
-            model.fit(
-                X_train,
-                [X_train, y_train],
-                epochs=epochs,
-                batch_size=batch_size,
-                verbose=verbose,
-                validation_split=0.1,
-            )
-        return model
-    model = train_autoencoder()
-
-    # X_train_preds = model.predict(X_train, verbose=verbose)
-    # assert False
+    X_train_preds = model.predict(X_train[0], verbose=verbose)
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
 
-    X_train_encoded = encoder_model.predict(X_train, verbose=verbose)
+    X_tr_encoded = encoder_model.predict(X_train[0], verbose=verbose)
+    X_val_encoded = encoder_model.predict(X_train[1], verbose=verbose)
+    X_test_encoded = encoder_model.predict(X_test, verbose=verbose)
 
-    if X_test is None:
-        return X_train_encoded
-    else:
-        X_test_encoded = encoder_model.predict(X_test, verbose=verbose)
-        return X_train_encoded, X_test_encoded
+    return X_tr_encoded, X_val_encoded, X_test_encoded
 
 
 def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
-                    y_train=None, epochs=100, is_Kaggle=True):
+                    y_train=None, epochs=100):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -399,43 +366,31 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
         Tuple of (X_train_preprocessed, X_test_preprocessed)
     """
     # print("\n=== Preprocessing Data ===")
-    
-    # Collection for all analyzer results from preprocessing methods
-    all_analyzer_results = {}
-    
-    # Drop columns with all NaN values in training data
-    nan_cols = X_train.columns[X_train.isna().all()]
-    if len(nan_cols) > 0:
-        # print(f"Dropping {len(nan_cols)} columns with all NaN values")
-        X_train = X_train.drop(columns=nan_cols)
-        X_test = X_test.drop(columns=nan_cols)
-    
+
     # Impute missing values with zeros (fit on train, transform both)
     # print("Imputing missing values with zeros...")
-    imputer = SimpleImputer(strategy='constant', fill_value=0).set_output(transform='pandas')
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_test_imputed = imputer.transform(X_test)
-    
+    # imputer = SimpleImputer(strategy='constant', fill_value=0).set_output(transform='pandas')
+    # X_train_imputed = X_train #imputer.fit_transform(X_train)
+    # X_test_imputed = X_test #imputer.transform(X_test)
+
     # Scale features (fit on train, transform both)
     # print("Scaling features...")
-    global_scaler = StandardScaler().set_output(transform='pandas')
-    X_train_scaled = global_scaler.fit_transform(X_train_imputed)
-    X_test_scaled = global_scaler.transform(X_test_imputed)
-    
+    # global_scaler = StandardScaler().set_output(transform='pandas')
+    # X_train_scaled = X_train_imputed #global_scaler.fit_transform(X_train_imputed)
+    # X_test_scaled = X_test_imputed #global_scaler.transform(X_test_imputed)
+
     # Apply dimensionality reduction if enabled
     if use_autoencoder:
         # print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_test_reduced = apply_autoencoder(X_train_scaled, X_test_scaled, y_train=y_train,
-                                                            latent_dim=autoencoder_latent_dim, epochs=epochs, is_Kaggle=is_Kaggle)
-        X_train_preprocessed = pd.DataFrame(X_train_reduced)
+        X_train_reduced, X_val_reduced, X_test_reduced = apply_autoencoder(X_train, X_test, y_train=y_train,
+                                                                           latent_dim=autoencoder_latent_dim, epochs=epochs)
+        X_tr_preprocessed = pd.DataFrame(X_train_reduced)
+        X_val_preprocessed = pd.DataFrame(X_val_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)
-    else:
-        X_train_preprocessed = pd.DataFrame(X_train_scaled, index=X_train.index)
-        X_test_preprocessed = pd.DataFrame(X_test_scaled, index=X_test.index)
-    
+
     # print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
     
-    return X_train_preprocessed, X_test_preprocessed
+    return X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed
 
 
 def load_competition_data(train_path, test_path, supp_paths=None, use_supplementary=True):
