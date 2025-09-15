@@ -394,6 +394,12 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, y_train=None):
     # X_train_imputed = X_train #imputer.fit_transform(X_train)
     # X_test_imputed = X_test #imputer.transform(X_test)
 
+    # Drop constant features
+    cons_cols = X_train[0].nunique() > 1
+    X_train[0] = X_train[0].loc[:, cons_cols]
+    X_train[1] = X_train[1].loc[:, cons_cols]
+    X_test = X_test.loc[:, cons_cols]
+
     # Scale features (fit on train, transform both)
     # print("Scaling features...")
     global_scaler = StandardScaler().set_output(transform='pandas')
