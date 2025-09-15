@@ -170,5 +170,16 @@ def test_density_estimate():
     # Empty SMILES string
     assert density_estimate({'molecular_weight': 0, 'vdw_volume': 0}) == 0
 
+def test_aromatic_atom_amount():
+    # Sum of every aromatic atom
+    assert aromatic_atom_amount({'c': 1, 'n': 4, 'o': 3}) == 8
+
+    # Empty dict
+    assert aromatic_atom_amount({}) == 0
+
+    # Empty SMILES string
+    assert aromatic_atom_amount({'c': 0, 'N': 0, 'O': 0}) == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

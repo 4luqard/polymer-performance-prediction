@@ -39,61 +39,12 @@ def instrument(fn):
 import keras
 from keras.optimizers import Adam
 from keras.models import Sequential, Model
-from keras.layers import Dense, Input, Dropout, LayerNormalization
-from keras.layers import BatchNormalization as BN
+from keras.layers import Dense, Input, Dropout, LayerNormalization, GaussianNoise
 
 import warnings
 def ignore_warn(*args, **kwargs):
     pass
 warnings.warn = ignore_warn
-
-# Competition metric constants for autoencoder loss
-MINMAX_DICT = {
-    'Tg': [-148.0297376, 472.25],
-    'FFV': [0.2269924, 0.77709707],
-    'Tc': [0.0465, 0.524],
-    'Density': [0.748691234, 1.840998909],
-    'Rg': [9.7283551, 34.672905605],
-}
-
-def create_masked_competition_loss(num_targets):
-    """Create a custom loss function based on the competition metric with masking for missing values."""
-    def masked_competition_loss(y_true, y_pred):
-        import tensorflow as tf
-        
-        # Create mask for non-NaN values (1 where valid, 0 where NaN/-10000.0)
-        mask = tf.cast(tf.not_equal(y_true, -10000.0), tf.float32)
-        
-        # Calculate absolute errors
-        abs_errors = tf.abs(y_pred - y_true)
-        
-        # Scale errors by property ranges
-        target_names = ['Tg', 'FFV', 'Tc', 'Density', 'Rg'][:num_targets]
-        scaled_errors = []
-        
-        for i, prop in enumerate(target_names):
-            if i < num_targets:
-                min_val, max_val = MINMAX_DICT[prop]
-                label_range = max_val - min_val
-                # Scale the error for this property and apply mask
-                scaled_error = abs_errors[:, i] / label_range
-                masked_error = scaled_error * mask[:, i]
-                scaled_errors.append(masked_error)
-        
-        # Stack errors and compute mean per sample
-        if len(scaled_errors) > 0:
-            stacked_errors = tf.stack(scaled_errors, axis=1)
-            # Count valid values per sample
-            valid_counts = tf.reduce_sum(mask, axis=1, keepdims=True)
-            # Avoid division by zero
-            valid_counts = tf.maximum(valid_counts, 1.0)
-            # Mean of valid errors per sample
-            sample_losses = tf.reduce_sum(stacked_errors, axis=1) / tf.squeeze(valid_counts, axis=1)
-            return tf.reduce_mean(sample_losses)
-        else:
-            return tf.constant(0.0)
-    
-    return masked_competition_loss
 
 def extract_molecular_features(smiles, rpt):
     """Extract features from SMILES string without external libraries"""
@@ -122,6 +73,7 @@ def extract_molecular_features(smiles, rpt):
     # Atom count derived features
     features['heavy_atom_amount'] = heavy_atom_amount(features) # No units
     features['heteroatom_amount'] = heteroatom_amount(features) # No units
+    features['aromatic_atom_amount'] = aromatic_atom_amount(features)
 
     # Molecular weights
     features['molecular_weight'] = molecular_weight(features) # grams per mole
@@ -135,12 +87,15 @@ def extract_molecular_features(smiles, rpt):
     # Target estimates
     features['density_estimate'] = density_estimate(features) # grams per centimeter cubed
 
+    # Atom percentages
+    features['carbon_percentage'] = features['C'] / max(features['heteroatom_amount'], 1)
+    features['aromatic_carbon_percentage'] = features['c'] / max(features['aromatic_atom_amount'], 1)
+
     # Count bonds
     features['num_single_bonds'] = smiles.count('-')
     features['num_double_bonds'] = smiles.count('=')
     features['num_triple_bonds'] = smiles.count('#')
-    features['num_aromatic_bonds'] = smiles.count(':')
-    
+
     # Count structural features
     features['num_branches'] = smiles.count('(')
 
@@ -158,9 +113,6 @@ def extract_molecular_features(smiles, rpt):
     features['has_sulfone'] = int('S(=O)(=O)' in smiles)
     features['has_ester'] = int('C(=O)O' in smiles or 'COO' in smiles)
     features['has_amide'] = int('C(=O)N' in smiles or 'CON' in smiles)
-    
-    # features['carbon_percent'] = (features['num_C'] + features['num_c']) / (features['heavy_atom_count'] + features['ion_count'])
-    # features['aromatic_ratio'] = features['num_aromatic_atoms'] / (features['heavy_atom_count'] + features['ion_count'])
     
     # Flexibility indicators
     # features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
@@ -226,7 +178,7 @@ def prepare_features(df):
                 rpt = False if col == 'SMILES' else True
                 features = extract_molecular_features(row[col], rpt)
                 # Add new_sim feature
-                features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
+                # features['new_sim'] = int(row['new_sim'])  # Convert boolean to int (0 or 1)
                 if rpt:
                     features_rpt = features
                 else:
@@ -234,7 +186,7 @@ def prepare_features(df):
             features_list.append(features_full | features_rpt)
         else:
             features = extract_molecular_features(row['SMILES'], False)
-            features['new_sim'] = int(row['new_sim'])
+            # features['new_sim'] = int(row['new_sim'])
             features_list.append(features)
     
     features_df = pd.DataFrame(features_list)
@@ -278,9 +230,11 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
     epochs = 25
     batch_size = 64
     drop_rate = 0.1
+    noise_std = 0.2
 
     input_dim = X_train[0].shape[1]
     encoder = Sequential([
+        GaussianNoise(noise_std),
         LayerNormalization(),
 
         Dense(latent_dim*32, activation='leaky_relu', input_shape=(input_dim,)),
@@ -356,6 +310,8 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
         verbose=verbose,
         validation_data=(X_train[1], [X_train[1], y_train[1]])
     )
+
+    # XXX: Saving predictions for residual analysis, comment when commiting.
 
     X_train_preds = model.predict(X_train[0], verbose=verbose)
 

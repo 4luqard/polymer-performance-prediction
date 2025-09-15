@@ -803,6 +803,26 @@ def heavy_atom_amount(features: dict) -> int:
 
     return total
 
+def aromatic_atom_amount(features: dict) -> int:
+    """
+    Calculate the total number of aromatic atoms.
+
+    Args:
+        features: Dictionary with atom counts where keys are atom symbols
+
+    Returns:
+        Total count of all aromatic atoms
+    """
+    # Define the available elements in the dataset
+    elements = ['b', 'c', 'n', 'o', 'p', 's']
+
+    total = 0
+    for key, value in features.items():
+        if key in elements:
+            total += value
+
+    return total
+
 def heteroatom_amount(features: dict) -> int:
     """
     Calculate the total number of heteroatoms (all atoms except hydrogen and carbon).
