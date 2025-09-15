@@ -35,6 +35,14 @@ def instrument(fn):
 
     return tracked_fn
 
+from cache import GlobalCache
+
+try:
+    None in global_cache.cache
+except Exception:
+    # del global_cache
+    global_cache = GlobalCache()
+
 
 import keras
 from keras.optimizers import Adam
@@ -165,8 +173,8 @@ def extract_molecular_features(smiles, rpt):
     return features
 
 
-@instrument
-def prepare_features(df):
+@global_cache()
+def prepare_features(df, force=False):
     """Convert SMILES to molecular features"""
     print("Extracting molecular features...")
     features_list = []
@@ -311,8 +319,6 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
         validation_data=(X_train[1], [X_train[1], y_train[1]])
     )
 
-    # XXX: Saving predictions for residual analysis, comment when commiting.
-
     X_train_preds = model.predict(X_train[0], verbose=verbose)
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
@@ -320,6 +326,9 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
     X_tr_encoded = encoder_model.predict(X_train[0], verbose=verbose)
     X_val_encoded = encoder_model.predict(X_train[1], verbose=verbose)
     X_test_encoded = encoder_model.predict(X_test, verbose=verbose)
+
+    # XXX: Saving predictions for residual analysis, comment when commiting.
+
 
     return X_tr_encoded, X_val_encoded, X_test_encoded
 

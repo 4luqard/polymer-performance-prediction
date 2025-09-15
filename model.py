@@ -58,7 +58,7 @@ else:
         'data/raw/extra_datasets/tg_density.csv'
     ]
 
-def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
+def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feature_extraction=False):
     """
     Main function to train model and make predictions
     
@@ -82,8 +82,8 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
 
     # Extract features
     print("\nExtracting features from SMILES...")
-    X_train = prepare_features(train_df)
-    X_test = prepare_features(test_df)
+    X_train = prepare_features(train_df, force=force_feature_extraction)
+    X_test = prepare_features(test_df, force=force_feature_extraction)
 
     # Prepare target variables
     y_train = train_df[target_columns]
@@ -231,4 +231,7 @@ if __name__ == "__main__":
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
     seeds = [456] if '--s' in sys.argv else [42, 123, 456]
 
-    main(cv_only=cv_only, seeds=seeds, use_supplementary=not no_supplement)
+    force_feature_extraction = '--feature-extract' in sys.argv or '--f' in sys.argv
+
+    main(cv_only=cv_only, seeds=seeds, use_supplementary=not no_supplement,
+         force_feature_extraction=force_feature_extraction)
