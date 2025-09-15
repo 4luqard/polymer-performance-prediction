@@ -229,3 +229,5 @@ notebooks/
 
 # Submission file
 output/
+/cache.py
+/cache.csv

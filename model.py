@@ -58,7 +58,7 @@ else:
         'data/raw/extra_datasets/tg_density.csv'
     ]
 
-def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feature_extraction=False):
+def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feature_extraction=False, force_preprocess=False):
     """
     Main function to train model and make predictions
     
@@ -68,7 +68,7 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feat
     """
     print(f"=== Separate {'LIGHTGBM'} Models for Polymer Prediction ===")
 
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+    target_columns = ['FFV', 'Tg', 'Tc', 'Density', 'Rg']
 
     # Load competition data using imported function
     train_df, test_df = load_competition_data(
@@ -113,9 +113,10 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feat
         'objective': 'regression_l1',
         'metric': 'mae',
         'boosting_type': 'gbdt',
+        'extra_trees': True,
         'max_depth': -1,
         'num_leaves': 31,
-        'n_estimators': 200,
+        'n_estimators': 2000,
         'learning_rate': 0.1,
         'feature_fraction': 0.9,
         'bagging_fraction': 0.8,
@@ -150,6 +151,9 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feat
     print(f"\n=== Training Separate {'LIGHTGBM'} Models for Each Target ===")
     predictions = np.zeros((len(X_test), len(target_columns)))
 
+    col_count = X_train.shape[1]
+    print(col_count)
+
     for i, target in enumerate(target_columns):
         print(f"\nTraining model for {target}...")
         
@@ -171,12 +175,18 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feat
         # Apply preprocessing on masked samples
         y_tr_df = pd.DataFrame({target: y_tr})
         y_val_df = pd.DataFrame({target: y_val})
-        X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed = preprocess_data(
+        X_tr_preprocessed, X_val_preprocessed, X_tst_preprocessed, X_train_comp_preprocessed = preprocess_data(
             [X_tr, X_val], X_test,
+            X_train_comp=X_train,
             use_autoencoder=USE_AUTOENCODER,
-            y_train=[y_tr_df, y_val_df]
+            y_train=[y_tr_df, y_val_df],
+            force=force_preprocess
         )
-            
+
+        X_tr_preprocessed = pd.concat([X_tr, X_tr_preprocessed], axis=1)
+        X_val_preprocessed = pd.concat([X_val, X_val_preprocessed], axis=1)
+        X_test_preprocessed = pd.concat([X_test, X_tst_preprocessed], axis=1)
+
         print(f"  Using all {X_tr_preprocessed.shape[1]} preprocessed features")
         print(f"  Training samples: {len(X_tr_preprocessed)}")
         print(f"  Validation samples: {len(X_val_preprocessed)}")
@@ -184,13 +194,24 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feat
         # Train model for this target
         model = lgb.LGBMRegressor(**lgb_params)
 
+        min_delta = {
+            'FFV': 5e-5,
+            'Tg': 1,
+            'Tc': 5e-5,
+            'Density': 5e-5,
+            'Rg': 1e-2
+        }
+
         # Train with validation data to see training progress
         model.fit(
             X_tr_preprocessed, y_tr,
             eval_set=[(X_tr_preprocessed, y_tr), (X_val_preprocessed, y_val)],
             eval_names=['train', 'valid'],
             eval_metric='mae',
-            callbacks=[lgb.log_evaluation(0)]  # Disable verbose output
+            callbacks=[
+                lgb.log_evaluation(10),
+                lgb.early_stopping(stopping_rounds=50, min_delta=min_delta[target])
+            ]  # Disable verbose output
         )
         # Get final MAE scores from eval results
         train_mae = model.evals_result_['train']['l1'][-1]
@@ -200,6 +221,14 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True, force_feat
         # Make predictions
         predictions[:, i] = model.predict(X_test_preprocessed)
         print(f"  Predictions: mean={predictions[:, i].mean():.4f}, std={predictions[:, i].std():.4f}")
+
+        X_train_comp_predictions = pd.concat([X_train, X_train_comp_preprocessed], axis=1)
+        train_preds_df = pd.DataFrame({f'{target}_preds': model.predict(X_train_comp_predictions)})
+        test_preds_df = pd.DataFrame({f'{target}_preds': predictions[:, i]})
+
+        X_train = pd.concat([X_train, X_train_comp_preprocessed.add_suffix(f'_{target}'), train_preds_df], axis=1)
+        X_test = pd.concat([X_test, X_tst_preprocessed.add_suffix(f'_{target}'), test_preds_df], axis=1)
+
 
     # Create submission DataFrame
     submission_df = pd.DataFrame({
@@ -231,7 +260,8 @@ if __name__ == "__main__":
     no_supplement = '--no-supplement' in sys.argv or '--no-supp' in sys.argv
     seeds = [456] if '--s' in sys.argv else [42, 123, 456]
 
-    force_feature_extraction = '--feature-extract' in sys.argv or '--f' in sys.argv
+    force_feature_extraction = '--force-feature-extract' in sys.argv or '--ffe' in sys.argv
+    force_preprocess = '--force-preprocess' in sys.argv or '--fp'
 
     main(cv_only=cv_only, seeds=seeds, use_supplementary=not no_supplement,
-         force_feature_extraction=force_feature_extraction)
+         force_feature_extraction=force_feature_extraction, force_preprocess=force_preprocess)

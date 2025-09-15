@@ -21,7 +21,7 @@ from extract_features import *
 from rich import console
 from sklearn.metrics import auc, confusion_matrix, precision_recall_curve
 
-console = console.Console(width=120)
+console = console.Console()
 from datetime import datetime
 
 from rich.jupyter import print as show
@@ -35,13 +35,13 @@ def instrument(fn):
 
     return tracked_fn
 
-from cache import GlobalCache
+# from cache import GlobalCache
 
-try:
-    None in global_cache.cache
-except Exception:
-    # del global_cache
-    global_cache = GlobalCache()
+# try:
+#     None in global_cache.cache
+# except Exception:
+#     # del global_cache
+#     global_cache = GlobalCache()
 
 
 import keras
@@ -63,6 +63,7 @@ def extract_molecular_features(smiles, rpt):
 
     # Basic string features
     features['length'] = len(smiles) # No units
+    features['num_long_carbon_branches'] = len(re.findall(r'[(]C+C[)]', smiles))
 
     # Number of atoms on the longest chain of atoms
     features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
@@ -70,6 +71,10 @@ def extract_molecular_features(smiles, rpt):
     # Ring features
     features['num_fused_rings'] = num_fused_rings(smiles) # No units
     features['num_rings'] = num_rings(smiles) # No units
+    features['num_bond_aromatic'] = len(re.findall(r'-c', smiles)) + len(re.findall(r'-n', smiles))
+    features['num_branch_rings'] = len(re.findall(r'[(]c[0-9]c+c[0-9][)]', smiles)) + len(re.findall(r'[(][-]c[0-9]c+c[0-9][)]', smiles))
+    features['num_same_ring_end_double'] = len(re.findall(r'[0-9][0-9]', smiles))
+    features['num_same_ring_end_triple'] = len(re.findall(r'[0-9][0-9][0-9]', smiles))
 
     # Atom count features, excluding Hydrogen
     features |= element_count(smiles, elements) # No units
@@ -91,6 +96,8 @@ def extract_molecular_features(smiles, rpt):
 
     # Stereochemistry
     features['num_tetrahedral_carbon'] = num_tetrahedral_carbon(smiles)
+    features['num_left_single_bonds'] = len(re.findall(r'/', smiles))
+    features['num_right_single_bonds'] = len(re.findall(r'\\', smiles))
 
     # Target estimates
     features['density_estimate'] = density_estimate(features) # grams per centimeter cubed
@@ -108,23 +115,23 @@ def extract_molecular_features(smiles, rpt):
     features['num_branches'] = smiles.count('(')
 
     # Polymer-specific features
-    features['has_polymer_end'] = int('*' in smiles)
     features['num_polymer_ends'] = smiles.count('*')
-    features['has_polymer_end_branch'] = int('(*)' in smiles)
+    features['num_polymer_end_branch'] = smiles.count('(*)')
+    features['num_branch_atom_end'] = len(re.findall(r'[A-Z][*][)]', smiles))
     
     # Functional group patterns
-    features['has_carbonyl'] = int('C(=O)' in smiles or 'C=O' in smiles)
-    # features['has_cfthree'] = int('C(F)(F)F' in smiles)
+    features['num_ketones'] = len(re.findall(r'C[(]=O[)]', smiles)) + len(re.findall(r'C=O', smiles))
+    features['num_haloalkanes'] = smiles.count('C(F)(F)F')
+    features['num_nitriles'] = len(re.findall(r'C#N', smiles)) + len(re.findall(r'N#C', smiles))
     # features['has_hydroxyl'] = int('OH' in smiles or 'O[H]' in smiles)  # Removed - may cause overfitting
-    features['has_ether'] = int('COC' in smiles or 'cOc' in smiles)
-    features['has_amine'] = int('N' in smiles)
-    features['has_sulfone'] = int('S(=O)(=O)' in smiles)
-    features['has_ester'] = int('C(=O)O' in smiles or 'COO' in smiles)
-    features['has_amide'] = int('C(=O)N' in smiles or 'CON' in smiles)
+    features['num_ether'] = smiles.count('COC')
+    features['num_sulfino'] = smiles.count('S(=O)(=O)')
+    features['num_ester'] = smiles.count('C(=O)O')
+    features['has_amide'] = smiles.count('C(=O)N') + smiles.count('CON')
     
     # Flexibility indicators
-    # features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] - features['num_rings'])
-    # features['flexibility_score'] = features['rotatable_bond_estimate'] / max(features['heavy_atom_count'], 1)
+    features['rotatable_bond_estimate'] = max(0, features['num_single_bonds'] + features['H'] - features['num_bond_aromatic'])
+    features['flexibility_score'] = features['rotatable_bond_estimate'] / max(features['heavy_atom_amount'], 1)
 
     # Size and complexity
     features['molecular_complexity'] = (features['num_rings'] + features['num_branches'] + 
@@ -133,14 +140,11 @@ def extract_molecular_features(smiles, rpt):
     # Additional polymer-specific patterns
     # Phenyl: aromatic 6-membered ring patterns
     features['has_phenyl'] = int(bool(re.search(r'c1ccccc1|c1ccc.*cc1', smiles)))
-    features['has_cyclohexyl'] = int('C1CCCCC1' in smiles)
+    features['has_cyclohexyl'] = len(re.findall(r'C[0-9]CCCCC[0-9]', smiles))
     features['has_methyl'] = int(bool(re.search(r'C(?![a-zA-Z])', smiles)))
-    segments = [x for x in re.split(r'[\(\)]', smiles) if x]
-    features['chain_length_estimate'] = max(len(x) for x in segments) if segments else 0
-    
+
     # Bridge: multiple different ring numbers
-    ring_numbers = set(re.findall(r'[0-9]', smiles))
-    features['has_bridge'] = int(len(ring_numbers) >= 2)
+    features['has_bridge'] = int(features['num_rings'] >= 2)
     
     # Main branch atom count
     features['main_branch_atoms'] = calculate_main_branch_atoms(smiles)
@@ -173,7 +177,7 @@ def extract_molecular_features(smiles, rpt):
     return features
 
 
-@global_cache()
+# @global_cache()
 def prepare_features(df, force=False):
     """Convert SMILES to molecular features"""
     print("Extracting molecular features...")
@@ -202,7 +206,7 @@ def prepare_features(df, force=False):
 
 
 @instrument
-def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
+def apply_autoencoder(X_train, X_test=None, X_train_comp=None, y_train=None, random_state=42):
     """
     Apply supervised encoder for dimensionality reduction.
 
@@ -233,12 +237,12 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
     if hasattr(tf, 'set_random_seed'):
         tf.set_random_seed(random_state)
 
-    verbose = 1
+    verbose = 0
     latent_dim = 32
     epochs = 25
     batch_size = 64
     drop_rate = 0.1
-    noise_std = 0.2
+    noise_std = 0.05
 
     input_dim = X_train[0].shape[1]
     encoder = Sequential([
@@ -300,7 +304,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
         Dense(int(latent_dim/4), activation='leaky_relu', input_shape=(latent_dim,)),
         LayerNormalization(),
         # BN(),
-        Dense(input_dim, activation='linear')
+        Dense(1, activation='linear')
     ], name="predictions")
     predictions = predictions(encoded)
 
@@ -319,21 +323,40 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
         validation_data=(X_train[1], [X_train[1], y_train[1]])
     )
 
-    X_train_preds = model.predict(X_train[0], verbose=verbose)
+    # ======================================================================
+    # Residual Analysis
+    # XXX: Saving predictions for residual analysis, comment when commiting.
+    # ======================================================================
+    # from pandas import DataFrame as DF
+
+    # X_tr_recon = DF(model.predict(X_train[0], verbose=verbose)[1], index=y_train[0].index, columns=list(y_train[0]))
+    # tr_recon_resids = (y_train[0] - X_tr_recon).add_suffix('_resid')
+    # tr_recon_resids['split'] = 'train'
+
+    # X_val_recon = DF(model.predict(X_train[1], verbose=verbose)[1], index=y_train[1].index, columns=list(y_train[1]))
+    # val_recon_resids = (y_train[1] - X_val_recon).add_suffix('_resid')
+    # val_recon_resids['split'] = 'val'
+
+    # features = pd.concat([y_train[0], tr_recon_resids], axis=1)
+    # resid_recon = pd.concat([y_train[1], val_recon_resids], axis=1)
+    # resids_recon = pd.concat([features, resid_recon], axis=0)
+    # resids_recon.to_parquet('residuals.parquet')
+    # assert False
+    # ======================================================================
+    # Residual Analysis
+    # ======================================================================
 
     encoder_model = Model(inputs=input_layer, outputs=encoded)
 
     X_tr_encoded = encoder_model.predict(X_train[0], verbose=verbose)
     X_val_encoded = encoder_model.predict(X_train[1], verbose=verbose)
     X_test_encoded = encoder_model.predict(X_test, verbose=verbose)
+    X_train_comp_encoded = encoder_model.predict(X_train_comp, verbose=verbose)
 
-    # XXX: Saving predictions for residual analysis, comment when commiting.
+    return X_tr_encoded, X_val_encoded, X_test_encoded, X_train_comp_encoded
 
-
-    return X_tr_encoded, X_val_encoded, X_test_encoded
-
-
-def preprocess_data(X_train, X_test, use_autoencoder=False, y_train=None):
+#@global_cache()
+def preprocess_data(X_train, X_test, X_train_comp, use_autoencoder=False, y_train=None, force=False):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -364,6 +387,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, y_train=None):
     X_train[0] = X_train[0].loc[:, cons_cols]
     X_train[1] = X_train[1].loc[:, cons_cols]
     X_test = X_test.loc[:, cons_cols]
+    X_train_comp = X_train_comp.loc[:, cons_cols]
 
     # Scale features (fit on train, transform both)
     # print("Scaling features...")
@@ -371,18 +395,20 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, y_train=None):
     X_train[0] = global_scaler.fit_transform(X_train[0])
     X_train[1] = global_scaler.transform(X_train[1])
     X_test = global_scaler.transform(X_test)
+    X_train_comp = global_scaler.transform(X_train_comp)
 
     # Apply dimensionality reduction if enabled
     if use_autoencoder:
         # print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_val_reduced, X_test_reduced = apply_autoencoder(X_train, X_test, y_train=y_train)
-        X_tr_preprocessed = pd.DataFrame(X_train_reduced)
-        X_val_preprocessed = pd.DataFrame(X_val_reduced)
-        X_test_preprocessed = pd.DataFrame(X_test_reduced)
+        X_train_reduced, X_val_reduced, X_test_reduced, X_train_comp_reduced = apply_autoencoder(X_train, X_test, X_train_comp=X_train_comp, y_train=y_train)
+        X_tr_preprocessed = pd.DataFrame(X_train_reduced, index=X_train[0].index)
+        X_val_preprocessed = pd.DataFrame(X_val_reduced, index=X_train[1].index)
+        X_test_preprocessed = pd.DataFrame(X_test_reduced, index=X_test.index)
+        X_train_comp_preprocessed = pd.DataFrame(X_train_comp_reduced, index=X_train_comp.index)
 
     # print(f"Final dimensions: Train {X_train_preprocessed.shape}, Test {X_test_preprocessed.shape}")
     
-    return X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed
+    return X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed, X_train_comp_preprocessed
 
 @instrument
 def load_competition_data(train_path, test_path, supp_paths=None, use_supplementary=True):

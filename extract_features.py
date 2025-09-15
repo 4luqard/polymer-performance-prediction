@@ -1132,7 +1132,7 @@ def calculate_average_bond_length(smiles):
         char = clean_smiles[i]
 
         # Skip parentheses
-        if char in '()':
+        if char in '()[]':
             i += 1
             continue
 
@@ -1143,7 +1143,7 @@ def calculate_average_bond_length(smiles):
 
         # Check for two-letter atoms
         atom = None
-        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br']:
+        if i + 1 < len(clean_smiles) and clean_smiles[i:i+2] in ['Cl', 'Br', 'Se', 'Na', 'Si', 'P', 'S', 'Ca', 'Ge', 'Cd', 'Sn', 'Te']:
             atom = clean_smiles[i:i+2]
             i += 2
         elif char in 'CNOSFIPcnos':
