@@ -106,7 +106,7 @@ def extract_molecular_features(smiles, rpt):
     features['length'] = len(smiles) # No units
 
     # Number of atoms on the longest chain of atoms
-    # features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
+    features['longest_chain_atom_count'] = longest_chain_atom_count(smiles) # No units
 
     # Ring features
     features['num_fused_rings'] = num_fused_rings(smiles) # No units
@@ -242,22 +242,18 @@ def prepare_features(df):
 
 
 @instrument
-def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=100, batch_size=128, random_state=42):
+def apply_autoencoder(X_train, X_test=None, y_train=None, random_state=42):
     """
     Apply supervised encoder for dimensionality reduction.
 
     Args:
-        X_train: Training data (n_samples, n_features)
+        X_train: Training+Validation data (n_samples, n_features)
         X_test: Test data (optional)
         y_train: Target values for supervised learning
-        latent_dim: Number of dimensions in the latent space
-        epochs: Number of training epochs
-        batch_size: Batch size for training
         random_state: Random seed for reproducibility
 
     Returns:
-        If X_test is None: X_train_encoded
-        If X_test is provided: (X_train_encoded, X_test_encoded)
+        X_tr_encoded, X_val_encoded, X_test_encoded
 
     """
     import numpy as np
@@ -279,33 +275,57 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
 
     verbose = 1
     latent_dim = 32
+    epochs = 25
+    batch_size = 64
+    drop_rate = 0.1
 
     input_dim = X_train[0].shape[1]
     encoder = Sequential([
-        # BN(),
-        # LayerNormalization(),
-        Dense(latent_dim*8, activation='leaky_relu', input_shape=(input_dim,)),
-        Dropout(0.2),
-        Dense(latent_dim*4, activation='leaky_relu', input_shape=(input_dim,)),
-        Dropout(0.2),
+        LayerNormalization(),
+
+        Dense(latent_dim*32, activation='leaky_relu', input_shape=(input_dim,)),
+        Dropout(drop_rate),
+        LayerNormalization(),
+
+        Dense(latent_dim*16, activation='leaky_relu'),
+        Dropout(drop_rate),
+        LayerNormalization(),
+
+        Dense(latent_dim*8, activation='leaky_relu'),
+        Dropout(drop_rate),
+        LayerNormalization(),
+
+        Dense(latent_dim*4, activation='leaky_relu'),
+        Dropout(drop_rate),
+        LayerNormalization(),
+
         Dense(latent_dim*2, activation='leaky_relu'),
-        Dropout(0.2),
-        # BN(),
+        Dropout(drop_rate),
+        LayerNormalization(),
+
         Dense(latent_dim, activation='linear'),
-        # Dense(latent_dim, activation='linear')
     ])
 
     decoder = Sequential([
-        # BN(),
+        LayerNormalization(),
+
         Dense(latent_dim*2, activation='leaky_relu', input_shape=(latent_dim,)),
-        Dropout(0.2),
+        LayerNormalization(),
+
         Dense(latent_dim*4, activation='leaky_relu'),
-        Dropout(0.2),
+        Dropout(drop_rate),
+        LayerNormalization(),
+
         Dense(latent_dim*8, activation='leaky_relu'),
-        Dropout(0.2),
-        # BN(),
+        LayerNormalization(),
+
+        Dense(latent_dim*16, activation='leaky_relu'),
+        LayerNormalization(),
+
+        Dense(latent_dim*32, activation='leaky_relu'),
+        LayerNormalization(),
+
         Dense(input_dim, activation='linear'),
-        # Dense(latent_dim, activation='linear')
     ], name='decoded')
 
     input_layer = Input(shape=(input_dim,))
@@ -314,7 +334,9 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
 
     predictions = Sequential([
         # BN(),
+        LayerNormalization(),
         Dense(int(latent_dim/4), activation='leaky_relu', input_shape=(latent_dim,)),
+        LayerNormalization(),
         # BN(),
         Dense(input_dim, activation='linear')
     ], name="predictions")
@@ -346,8 +368,7 @@ def apply_autoencoder(X_train, X_test=None, y_train=None, latent_dim=26, epochs=
     return X_tr_encoded, X_val_encoded, X_test_encoded
 
 
-def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_dim=30, 
-                    y_train=None, epochs=100):
+def preprocess_data(X_train, X_test, use_autoencoder=False, y_train=None):
     """
     Preprocess training and test data including:
     - Dropping columns with all NaN values
@@ -375,15 +396,15 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
 
     # Scale features (fit on train, transform both)
     # print("Scaling features...")
-    # global_scaler = StandardScaler().set_output(transform='pandas')
-    # X_train_scaled = X_train_imputed #global_scaler.fit_transform(X_train_imputed)
-    # X_test_scaled = X_test_imputed #global_scaler.transform(X_test_imputed)
+    global_scaler = StandardScaler().set_output(transform='pandas')
+    X_train[0] = global_scaler.fit_transform(X_train[0])
+    X_train[1] = global_scaler.transform(X_train[1])
+    X_test = global_scaler.transform(X_test)
 
     # Apply dimensionality reduction if enabled
     if use_autoencoder:
         # print(f"Applying supervised autoencoder: {X_train_scaled.shape[1]} features -> {autoencoder_latent_dim} dimensions")
-        X_train_reduced, X_val_reduced, X_test_reduced = apply_autoencoder(X_train, X_test, y_train=y_train,
-                                                                           latent_dim=autoencoder_latent_dim, epochs=epochs)
+        X_train_reduced, X_val_reduced, X_test_reduced = apply_autoencoder(X_train, X_test, y_train=y_train)
         X_tr_preprocessed = pd.DataFrame(X_train_reduced)
         X_val_preprocessed = pd.DataFrame(X_val_reduced)
         X_test_preprocessed = pd.DataFrame(X_test_reduced)

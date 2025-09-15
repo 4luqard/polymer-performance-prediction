@@ -29,8 +29,7 @@ from feature_importance import *
 # Import preprocessing function
 from data_processing import preprocess_data
 
-def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, random_seed=42, smiles=None,
-                           use_autoencoder=False, autoencoder_latent_dim=30, epochs=100):
+def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, random_seed=42, use_autoencoder=False):
     """
     Perform cross-validation for separate models approach
     
@@ -95,9 +94,7 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
             X_tr_final, X_val_final, X_test_final = preprocess_data(
                 [X_tr, X_val_inner], X_val_masked,
                 use_autoencoder=use_autoencoder,
-                autoencoder_latent_dim=autoencoder_latent_dim,
                 y_train=[y_tr_df, y_val_df],
-                epochs=epochs
             )
             
             val_complete_indices = val_mask_indices
@@ -218,8 +215,8 @@ def perform_cross_validation(X, y, lgb_params, cv_folds=5, target_columns=None, 
     return result
 
 
-def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smiles=None,
-                          use_autoencoder=False, autoencoder_latent_dim=30, epochs=100, seeds=[42, 123, 456]):
+def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None,
+                          use_autoencoder=False, seeds=[42, 123, 456]):
     """
     Perform cross-validation with multiple random seeds for more robust results
     
@@ -247,13 +244,10 @@ def perform_multi_seed_cv(X, y, lgb_params, cv_folds=5, target_columns=None, smi
     for seed in seeds:
         print(f"\n--- Running CV with seed {seed} ---")
         result = perform_cross_validation(X, y, lgb_params, cv_folds=cv_folds,
-                                        target_columns=target_columns, 
-                                        random_seed=seed,
-                                        smiles=smiles,
-                                        use_autoencoder=use_autoencoder,
-                                        autoencoder_latent_dim=autoencoder_latent_dim,
-                                        epochs=epochs)
-        
+                                          target_columns=target_columns,
+                                          random_seed=seed,
+                                          use_autoencoder=use_autoencoder)
+
         if result is not None:
             seed_results[seed] = result
             all_scores.extend(result['fold_scores'])

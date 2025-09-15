@@ -25,8 +25,6 @@ IS_KAGGLE = os.path.exists('/kaggle/input')
 
 # Autoencoder settings
 USE_AUTOENCODER = True
-AUTOENCODER_LATENT_DIM = 32  # Number of latent dimensions
-EPOCHS = 25
 
 # Set paths based on environment
 if IS_KAGGLE:
@@ -141,10 +139,7 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
                                                   lgb_params=lgb_params,
                                                   cv_folds=3,
                                                   target_columns=target_columns,
-                                                  smiles=train_df['SMILES'],
                                                   use_autoencoder=USE_AUTOENCODER,
-                                                  autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-                                                  epochs=EPOCHS,
                                                   seeds=seeds)
             
         return {
@@ -179,9 +174,7 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
         X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed = preprocess_data(
             [X_tr, X_val], X_test,
             use_autoencoder=USE_AUTOENCODER,
-            autoencoder_latent_dim=AUTOENCODER_LATENT_DIM,
-            y_train=[y_tr_df, y_val_df],
-            epochs=EPOCHS
+            y_train=[y_tr_df, y_val_df]
         )
             
         print(f"  Using all {X_tr_preprocessed.shape[1]} preprocessed features")
