@@ -70,22 +70,24 @@ def main(cv_only=False, seeds=[42, 123, 456], use_supplementary=True):
     """
     print(f"=== Separate {'LIGHTGBM'} Models for Polymer Prediction ===")
 
+    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
+
     # Load competition data using imported function
     train_df, test_df = load_competition_data(
         TRAIN_PATH, TEST_PATH, 
         supp_paths=SUPP_PATHS,
         use_supplementary=use_supplementary
     )
-    
+
+    # Basic outlier removal
+    train_df = remove_outliers(train_df, target_columns)
+
     # Extract features
-    print("\nExtracting features from training data...")
+    print("\nExtracting features from SMILES...")
     X_train = prepare_features(train_df)
-
-    print("\nExtracting features from test data...")
     X_test = prepare_features(test_df)
-    # Prepare target variables
-    target_columns = ['Tg', 'FFV', 'Tc', 'Density', 'Rg']
 
+    # Prepare target variables
     y_train = train_df[target_columns]
     
     # Print feature statistics

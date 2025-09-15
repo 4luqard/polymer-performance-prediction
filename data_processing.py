@@ -213,7 +213,7 @@ def extract_molecular_features(smiles, rpt):
     return features
 
 
-
+@instrument
 def prepare_features(df):
     """Convert SMILES to molecular features"""
     print("Extracting molecular features...")
@@ -392,7 +392,7 @@ def preprocess_data(X_train, X_test, use_autoencoder=False, autoencoder_latent_d
     
     return X_tr_preprocessed, X_val_preprocessed, X_test_preprocessed
 
-
+@instrument
 def load_competition_data(train_path, test_path, supp_paths=None, use_supplementary=True):
     """
     Load competition data including main training, test, and optional supplementary datasets
@@ -479,5 +479,19 @@ def load_competition_data(train_path, test_path, supp_paths=None, use_supplement
     return train_df, test_df
 
 
+@instrument
+def remove_outliers(train_df, target_columns):
+    for target in target_columns:
+        mean = train_df[target].mean()
+        std = train_df[target].std()
 
+        # Z-score
+        train_df[target] = (train_df[target] - mean) / std
 
+        # Remove samples with Z-score below -3 and above 3
+        train_df.loc[train_df[target].abs() >= 3, target] = np.nan
+
+        # Inverse transform
+        train_df[target] = train_df[target] * std + mean
+
+    return train_df
